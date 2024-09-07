@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>WHtml2png.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="WHtml2png.html">WHtml2png</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">WHtml2png.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import fs from 'fs'
+import path from 'path'
+import puppeteer from 'puppeteer'
+import get from 'lodash-es/get.js'
+import each from 'lodash-es/each.js'
+import find from 'lodash-es/find.js'
+import isnum from 'wsemi/src/isnum.mjs'
+import isearr from 'wsemi/src/isearr.mjs'
+import iseobj from 'wsemi/src/iseobj.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import now2strp from 'wsemi/src/now2strp.mjs'
+import genID from 'wsemi/src/genID.mjs'
+import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
+import fsIsFile from 'wsemi/src/fsIsFile.mjs'
+// import fsCopyFolder from 'wsemi/src/fsCopyFolder.mjs'
+
+
+//已不須自動複製chromium, node_modules/puppeteer/.local-chromium/win64-884014
+
+
+//wd
+let wd = process.cwd()
+// console.log('process.cwd()', wd)
+
+
+/**
+ * 呼叫Chromium轉Html為png圖
+ *
+ * @class
+ * @param {Number} [width=700] 輸入圖片原始寬度數字，單位px，預設700
+ * @param {Number} [height=400] 輸入圖片原始高度數字，單位px，預設400
+ * @param {Number} [scale=3] 輸入欲將圖片放大比例數字，單位px，預設3
+ * @param {Object} [opt={}] 輸入設定物件，預設{}
+ * @param {String} [html=''] 輸入HTML字串，預設''
+ * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
+ * @param {String} [opt.executablePath=''] 輸入puppeteer的executablePath字串，預設''
+ * @param {String} [opt.executableFolder=''] 輸入不提供executablePath時則提供搜索chrome.exe所在資料夾字串，找到後將自動給予puppeteer的executablePath，預設''
+ * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
+ * @example
+ *
+ * async function testa() {
+ *
+ *     let html = `
+ * &lt;div style="padding:10px; display:inline-block;">
+ *     &lt;div style="background-color: rgb(255, 255, 255); border-radius: 5px; width: 600px; box-shadow:0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);">
+ *         &lt;div style="padding: 20px; border-bottom: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 5px 5px 0px 0px; display: flex; justify-content: flex-start; align-items: center;">
+ *             &lt;div>
+ *                 &lt;div style="font-size: 2rem;">Panel Title&lt;/div>
+ *             &lt;/div>
+ *         &lt;/div>
+ *         &lt;div style="border-radius: 0px;">
+ *             &lt;div style="padding: 20px;">
+ *                 Here is a panel content, Morbi mattis ullamcorper velit. Donec orci lectus, aliquam ut, faucibus non, euismod id, nulla. In ut quam vitae odio lacinia tincidunt.
+ *             &lt;/div>
+ *         &lt;/div>
+ *         &lt;div style="padding: 20px; border-top: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 0px 0px 5px 5px;">
+ *             Here is a panel footer
+ *         &lt;/div>
+ *     &lt;/div>
+ * &lt;/div>
+ *     `
+ *     let width = 620
+ *     let height = 235
+ *     let scale = 3
+ *
+ *     let b64 = await WHtml2png(width, height, scale, html)
+ *     // console.log('b64', b64)
+ *
+ *     fs.writeFileSync('./test-scla.png', b64, { encoding: 'base64' })
+ *
+ *     console.log('finish')
+ * }
+ * testa()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ *
+ */
+async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = {}) {
+    // console.log('WHtml2png', width, height, scale, opt)
+
+    //width
+    if (!isnum(width)) {
+        return Promise.reject('width is not a number')
+    }
+    width = cdbl(width)
+    if (width &lt;= 0) {
+        return Promise.reject('width &lt;= 0')
+    }
+
+    //height
+    if (!isnum(height)) {
+        return Promise.reject('height is not a number')
+    }
+    height = cdbl(height)
+    if (height &lt;= 0) {
+        return Promise.reject('height &lt;= 0')
+    }
+
+    //scale
+    if (!isnum(scale)) {
+        return Promise.reject('scale is not a number')
+    }
+    scale = cdbl(scale)
+    if (scale &lt;= 0) {
+        return Promise.reject('scale &lt;= 0')
+    }
+
+    //html
+    if (!isestr(html)) {
+        return Promise.reject('html is not an effective string')
+    }
+    let cPanelHtml = html
+
+    //scriptsHead
+    let scriptsHead = get(opt, 'scriptsHead')
+    if (!isearr(scriptsHead)) {
+        scriptsHead = []
+    }
+
+    //cScriptsHead
+    let cScriptsHead = ''
+    each(scriptsHead, (v) => {
+        let c = `&lt;script src="${v}">&lt;/script>\n`
+        cScriptsHead += c
+    })
+
+    //execJsHead
+    let execJsHead = get(opt, 'execJsHead')
+    if (!isearr(execJsHead)) {
+        execJsHead = []
+    }
+
+    //cExecJsHead
+    let cExecJsHead = ''
+    each(execJsHead, (v) => {
+        let c = `&lt;script>${v}&lt;/script>\n\n`
+        cExecJsHead += c
+    })
+
+    //execJsPost
+    let execJsPost = get(opt, 'execJsPost')
+    if (!isearr(execJsPost)) {
+        execJsPost = []
+    }
+
+    //cExecJsPost
+    let cExecJsPost = ''
+    each(execJsPost, (v) => {
+        let c = `&lt;script>${v}&lt;/script>\n\n`
+        cExecJsPost += c
+    })
+
+    //panelStyle
+    let cPanelStyle = get(opt, 'panelStyle', '')
+    if (iseobj(cPanelStyle)) {
+        let c = ''
+        each(cPanelStyle, (v, k) => {
+            c += `${k}:${v};`
+        })
+        cPanelStyle = c
+    }
+    if (!isestr(cPanelStyle)) {
+        cPanelStyle = ''
+    }
+
+    //executablePath
+    let executablePath = get(opt, 'executablePath', '')
+    //若不給則由puppeteer偵測取得或給executableFolder搜尋取得
+
+    //executableFolder
+    let executableFolder = get(opt, 'executableFolder', '')
+    if (isestr(executableFolder) &amp;&amp; !isestr(executablePath)) {
+        //executablePath='C:\\Users\\user\\.cache\\puppeteer\\chrome\\win64-116.0.5845.96\\chrome-win64\\chrome.exe'
+        //executableFolder='C:\\Users\\user\\.cache\\puppeteer'
+        let fps = fsTreeFolder(executableFolder, null)
+        let r = find(fps, (v) => {
+            return v.name === 'chrome.exe'
+        })
+        // console.log('r', r)
+        if (iseobj(r)) {
+            executablePath = r.path
+        }
+        else {
+            throw new Error(`can not find chrome.exe in executableFolder[${executableFolder}]`)
+        }
+    }
+
+    //fnOut
+    let fnOut = `./whpic-${now2strp()}-${genID()}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
+
+    //fpOut
+    let fpOut = path.resolve(wd, fnOut)
+    // console.log('fpOut', fpOut)
+
+    //fnHtml
+    let fnHtml = `./whweb-${now2strp()}-${genID()}.html`
+
+    //fpHtml
+    let fpHtml = path.resolve(wd, fnHtml)
+    // console.log('fpHtml', fpHtml)
+
+    //html
+    let g = `
+&lt;!DOCTYPE html>
+&lt;html>
+&lt;head>
+  &lt;meta charset="UTF-8">
+  &lt;title>highcharts to png&lt;/title>
+
+  &lt;script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js">&lt;/script>
+
+  &lt;script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.js">&lt;/script>
+  &lt;script>
+      let w = wsemi
+  &lt;/script>
+
+  {cScriptsHead}
+
+  {cExecJsHead}
+
+&lt;/head>
+&lt;body style="padding:0; margin:0;">
+
+    &lt;div id="pl" style="{cPanelStyle}">
+        {cPanelHtml}
+    &lt;/div>
+
+    {cExecJsPost}
+
+&lt;/body>
+&lt;/html>
+`
+
+    //html與style先取代, 避免取代到引入程式碼
+    g = g.replace('{cPanelStyle}', cPanelStyle)
+    g = g.replace('{cPanelHtml}', cPanelHtml)
+
+    //引入程式碼
+    g = g.replace('{cScriptsHead}', cScriptsHead)
+    g = g.replace('{cExecJsHead}', cExecJsHead)
+    g = g.replace('{cExecJsPost}', cExecJsPost)
+
+    //writeFileSync
+    fs.writeFileSync(fpHtml, g, 'utf8')
+
+    //b64
+    let b64 = ''
+    let core = async () => {
+
+        //puppeteerOpt
+        let puppeteerOpt = {
+            headless: true, //true, false, 'new', 'shell'
+            slowMo: 20,
+        }
+        if (isestr(executablePath)) {
+            puppeteerOpt.executablePath = executablePath
+        }
+
+        //browser
+        let browser = await puppeteer.launch(puppeteerOpt)
+
+        //page
+        let page = await browser.newPage()
+
+        //viewport
+        let viewport = {
+            x: 0,
+            y: 0,
+            width: Number(width),
+            height: Number(height),
+            deviceScaleFactor: Number(scale),
+        }
+        //console.log('viewport',viewport)
+
+        //show page
+        await page.goto(fpHtml)
+        await page.setViewport(viewport)
+
+        // //delay 3s for highchart rendered
+        // await page.waitFor(3000)
+
+        //screenshot
+        await page.screenshot({ path: fpOut }) //fullPage: true
+
+        //close
+        // await page.close()
+        await browser.close()
+
+        //readFileSync
+        b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
+
+    }
+    await core()
+        .catch((err) => {
+            console.log(err)
+        })
+
+    //delete
+    if (fsIsFile(fpHtml)) {
+        fs.unlinkSync(fpHtml)
+    }
+
+    //delete
+    if (fsIsFile(fpOut)) {
+        fs.unlinkSync(fpOut)
+    }
+
+    return b64
+}
+
+
+export default WHtml2png
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Sep 07 2024 21:57:46 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

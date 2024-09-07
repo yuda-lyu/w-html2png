@@ -1,0 +1,31 @@
+{
+  "name": "w-html2png",
+  "version": "1.0.0",
+  "main": "dist/w-html2png.umd.js",
+  "dependencies": {
+    "lodash-es": "^4.17.21",
+    "puppeteer": "^23.3.0",
+    "wsemi": "^1.7.58"
+  },
+  "devDependencies": {
+    "w-package-tools": "^1.0.75"
+  },
+  "scripts": {
+    "test": "mocha --parallel --timeout 60000 --experimental-modules",
+    "deploy": "gh-pages -d docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuda-lyu/w-html2png.git"
+  },
+  "keywords": [
+    "package",
+    "tool",
+    "chromium",
+    "convert",
+    "png",
+    "nodejs"
+  ],
+  "author": "yuda-lyu(semisphere)",
+  "license": "MIT"
+}
