@@ -64,7 +64,7 @@
 
     
 
-    <h4 class="name" id="WHtml2png"><span class="type-signature type-signature-async">(async) </span>new WHtml2png<span class="signature">(width<span class="signature-attributes">opt</span>, height<span class="signature-attributes">opt</span>, scale<span class="signature-attributes">opt</span>, opt<span class="signature-attributes">opt</span>, html<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="WHtml2png"><span class="type-signature type-signature-async">(async) </span>new WHtml2png<span class="signature">(width<span class="signature-attributes">opt</span>, height<span class="signature-attributes">opt</span>, scale<span class="signature-attributes">opt</span>, html<span class="signature-attributes">opt</span>, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -80,7 +80,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line80">line 80</a>
+        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line82">line 82</a>
     </li></ul></dd>
     
 
@@ -281,46 +281,6 @@
 
         <tr>
             
-                <td class="name"><code>opt</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type">Object</span>
-
-
-
-            
-            </td>
-
-            
-                <td class="attributes">
-                
-                    &lt;optional><br>
-                
-
-                
-
-                
-                </td>
-            
-
-            
-                <td class="default">
-                
-                    <code>{}</code>
-                
-                </td>
-            
-
-            <td class="description last"><p>輸入設定物件，預設{}</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
                 <td class="name"><code>html</code></td>
             
 
@@ -361,7 +321,70 @@
 
         <tr>
             
-                <td class="name"><code>opt.scriptsHead</code></td>
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件，預設{}</p>
+                <h6>Properties</h6>
+                
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>scriptsHead</code></td>
             
 
             <td class="type">
@@ -401,7 +424,87 @@
 
         <tr>
             
-                <td class="name"><code>opt.executablePath</code></td>
+                <td class="name"><code>execJsHead</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入插入head內執行js程式碼陣列，預設[]</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>execJsPost</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入於dom末插入執行js程式碼陣列，預設[]</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>executablePath</code></td>
             
 
             <td class="type">
@@ -441,7 +544,7 @@
 
         <tr>
             
-                <td class="name"><code>opt.executableFolder</code></td>
+                <td class="name"><code>executableFolder</code></td>
             
 
             <td class="type">
@@ -475,6 +578,13 @@
             
 
             <td class="description last"><p>輸入不提供executablePath時則提供搜索chrome.exe所在資料夾字串，找到後將自動給予puppeteer的executablePath，預設''</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+            </td>
         </tr>
 
     
@@ -559,7 +669,7 @@
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Sep 07 2024 21:57:46 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Sep 07 2024 22:07:56 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

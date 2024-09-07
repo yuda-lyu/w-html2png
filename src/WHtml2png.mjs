@@ -31,9 +31,11 @@ let wd = process.cwd()
  * @param {Number} [width=700] 輸入圖片原始寬度數字，單位px，預設700
  * @param {Number} [height=400] 輸入圖片原始高度數字，單位px，預設400
  * @param {Number} [scale=3] 輸入欲將圖片放大比例數字，單位px，預設3
- * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {String} [html=''] 輸入HTML字串，預設''
+ * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
+ * @param {Array} [opt.execJsHead=[]] 輸入插入head內執行js程式碼陣列，預設[]
+ * @param {Array} [opt.execJsPost=[]] 輸入於dom末插入執行js程式碼陣列，預設[]
  * @param {String} [opt.executablePath=''] 輸入puppeteer的executablePath字串，預設''
  * @param {String} [opt.executableFolder=''] 輸入不提供executablePath時則提供搜索chrome.exe所在資料夾字串，找到後將自動給予puppeteer的executablePath，預設''
  * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
@@ -111,7 +113,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isestr(html)) {
         return Promise.reject('html is not an effective string')
     }
-    let cPanelHtml = html
+    let cHtml = html
 
     //scriptsHead
     let scriptsHead = get(opt, 'scriptsHead')
@@ -151,19 +153,6 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         let c = `<script>${v}</script>\n\n`
         cExecJsPost += c
     })
-
-    //panelStyle
-    let cPanelStyle = get(opt, 'panelStyle', '')
-    if (iseobj(cPanelStyle)) {
-        let c = ''
-        each(cPanelStyle, (v, k) => {
-            c += `${k}:${v};`
-        })
-        cPanelStyle = c
-    }
-    if (!isestr(cPanelStyle)) {
-        cPanelStyle = ''
-    }
 
     //executablePath
     let executablePath = get(opt, 'executablePath', '')
@@ -223,8 +212,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 </head>
 <body style="padding:0; margin:0;">
 
-    <div id="pl" style="{cPanelStyle}">
-        {cPanelHtml}
+    <div id="pl">
+        {cHtml}
     </div>
 
     {cExecJsPost}
@@ -234,8 +223,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 `
 
     //html與style先取代, 避免取代到引入程式碼
-    g = g.replace('{cPanelStyle}', cPanelStyle)
-    g = g.replace('{cPanelHtml}', cPanelHtml)
+    g = g.replace('{cHtml}', cHtml)
 
     //引入程式碼
     g = g.replace('{cScriptsHead}', cScriptsHead)
