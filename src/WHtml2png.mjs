@@ -34,8 +34,8 @@ let wd = process.cwd()
  * @param {String} [html=''] 輸入HTML字串，預設''
  * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
- * @param {Array} [opt.execJsHead=[]] 輸入插入head內執行js程式碼陣列，預設[]
- * @param {Array} [opt.execJsPost=[]] 輸入於dom末插入執行js程式碼陣列，預設[]
+ * @param {String|Array} [opt.execJsHead=''] 輸入插入head內執行js程式碼字串或陣列，預設''
+ * @param {String|Array} [opt.execJsPost=''] 輸入於dom末插入執行js程式碼字串或陣列，預設''
  * @param {String} [opt.executablePath=''] 輸入puppeteer的executablePath字串，預設''
  * @param {String} [opt.executableFolder=''] 輸入不提供executablePath時則提供搜索chrome.exe所在資料夾字串，找到後將自動給予puppeteer的executablePath，預設''
  * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
@@ -130,6 +130,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //execJsHead
     let execJsHead = get(opt, 'execJsHead')
+    if (isestr(execJsHead)) {
+        execJsHead = [execJsHead]
+    }
     if (!isearr(execJsHead)) {
         execJsHead = []
     }
@@ -143,6 +146,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //execJsPost
     let execJsPost = get(opt, 'execJsPost')
+    if (isestr(execJsPost)) {
+        execJsPost = [execJsPost]
+    }
     if (!isearr(execJsPost)) {
         execJsPost = []
     }
