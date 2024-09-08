@@ -115,6 +115,12 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     }
     let cHtml = html
 
+    //modeHeadless
+    let modeHeadless = get(opt, 'modeHeadless')
+    if (modeHeadless !== true && modeHeadless !== false && modeHeadless !== 'new' && modeHeadless !== 'shell') {
+        modeHeadless = 'shell' //shell為舊版, true為新版, 但新版會出現瞬間chrome白視窗會拿焦點, 故暫時預設舊版
+    }
+
     //scriptsHead
     let scriptsHead = get(opt, 'scriptsHead')
     if (!isearr(scriptsHead)) {
@@ -245,7 +251,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
         //puppeteerOpt
         let puppeteerOpt = {
-            headless: true, //true, false, 'new', 'shell'
+            headless: modeHeadless,
             slowMo: 20,
         }
         if (isestr(executablePath)) {

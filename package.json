@@ -1,6 +1,6 @@
 {
   "name": "w-html2png",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "lodash-es": "^4.17.21",
