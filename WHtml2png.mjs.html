@@ -51,10 +51,12 @@ import puppeteer from 'puppeteer'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
 import find from 'lodash-es/find.js'
+import size from 'lodash-es/size.js'
 import isnum from 'wsemi/src/isnum.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
 import iseobj from 'wsemi/src/iseobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
+import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import genID from 'wsemi/src/genID.mjs'
@@ -165,7 +167,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     //modeHeadless
     let modeHeadless = get(opt, 'modeHeadless')
     if (modeHeadless !== true &amp;&amp; modeHeadless !== false &amp;&amp; modeHeadless !== 'new' &amp;&amp; modeHeadless !== 'shell') {
-        modeHeadless = 'shell' //shell為舊版, true為新版, 但新版會出現瞬間chrome白視窗會拿焦點, 故暫時預設舊版
+        modeHeadless = 'new' //無頭, 不顯示UI
+        // modeHeadless = false //顯示UI
     }
 
     //scriptsHead
@@ -292,16 +295,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     //writeFileSync
     fs.writeFileSync(fpHtml, g, 'utf8')
 
-    //b64
-    let b64 = ''
-    let core = async () => {
+    //supplyBrowser
+    let supplyBrowser = async (fun) => {
+        let errs = []
 
         //puppeteerOpt
         let puppeteerOpt = {
             headless: modeHeadless,
             slowMo: 20,
-              args: [
+            args: [
                 '--no-sandbox',
+                '--incognito',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
@@ -320,43 +324,203 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         }
 
         //browser
-        let browser = await puppeteer.launch(puppeteerOpt)
+        let browser = null
+        await puppeteer.launch(puppeteerOpt)
+            .then((res) => {
+                browser = res
+            })
+            .catch((err) => {
+                errs.push({
+                    anchor: 'puppeteer.launch(puppeteerOpt)',
+                    err,
+                })
+            })
 
-        //page
-        let page = await browser.newPage()
-
-        //viewport
-        let viewport = {
-            x: 0,
-            y: 0,
-            width: Number(width),
-            height: Number(height),
-            deviceScaleFactor: Number(scale),
+        //call fun
+        if (browser !== null) {
+            try {
+                let r = fun(browser)
+                if (ispm(r)) {
+                    r = await r
+                }
+            }
+            catch (err) {
+                //try catch也能攔截async函數
+                errs.push({
+                    anchor: 'fun(browser)',
+                    err,
+                })
+            }
         }
-        //console.log('viewport',viewport)
 
-        //show page
-        await page.goto(fpHtml)
-        await page.setViewport(viewport)
-
-        // //delay 3s for highchart rendered
-        // await page.waitFor(3000)
-
-        //screenshot
-        await page.screenshot({ path: fpOut }) //fullPage: true
+        // //disconnect, 不使用, 會出現Error: EBUSY: resource busy or locked, unlink '...first_party_sets.db-journal'
+        // if (browser !== null) {
+        //     try {
+        //         await browser.disconnect()
+        //     }
+        //     catch (err) {
+        //         //不一定能disconnect, 故不紀錄錯誤
+        //         // errs.push({
+        //         //     anchor: 'browser.disconnect()',
+        //         //     err,
+        //         // })
+        //     }
+        // }
 
         //close
-        // await page.close()
-        await browser.close()
+        if (browser !== null) {
+            try {
+                await browser.close()
+            }
+            catch (err) {
+                errs.push({
+                    anchor: 'browser.close()',
+                    err,
+                })
+            }
+        }
+
+        if (size(errs) > 0) {
+            return {
+                state: 'error',
+                msg: errs,
+            }
+        }
+        return {
+            state: 'success',
+            msg: '',
+        }
+    }
+
+    //supplyPage
+    let supplyPage = async(browser, fun) => {
+        let errs = []
+
+        //page
+        let page = null
+        await browser.newPage()
+            .then((res) => {
+                page = res
+            })
+            .catch((err) => {
+                errs.push({
+                    anchor: 'browser.newPage()',
+                    err,
+                })
+            })
+
+        //call fun
+        if (page !== null) {
+            try {
+                let r = fun(page)
+                if (ispm(r)) {
+                    r = await r
+                }
+            }
+            catch (err) {
+                //try catch也能攔截async函數
+                errs.push({
+                    anchor: 'fun(page)',
+                    err,
+                })
+            }
+        }
+
+        //close
+        if (page !== null) {
+            try {
+                await page.close()
+            }
+            catch (err) {
+                errs.push({
+                    anchor: 'page.close()',
+                    err,
+                })
+            }
+        }
+
+        if (size(errs) > 0) {
+            return {
+                state: 'error',
+                msg: errs,
+            }
+        }
+        return {
+            state: 'success',
+            msg: '',
+        }
+    }
+
+    //core
+    let core = async () => {
+
+        //supplyBrowser
+        let resPage = null
+        let resBrowser = null
+        resBrowser = await supplyBrowser(async(browser) => {
+
+            //supplyPage
+            resPage = await supplyPage(browser, async(page) => {
+
+                //viewport
+                let viewport = {
+                    x: 0,
+                    y: 0,
+                    width: Number(width),
+                    height: Number(height),
+                    deviceScaleFactor: Number(scale),
+                }
+                //console.log('viewport',viewport)
+
+                //show page
+                await page.goto(fpHtml, { waitUntil: 'networkidle0' })
+                await page.setViewport(viewport)
+
+                // //delay 3s for highchart rendered
+                // await page.waitFor(3000)
+
+                //screenshot
+                await page.screenshot({ path: fpOut }) //fullPage: true
+
+            })
+                .catch(() => {}) //全攔截不會有catch
+
+        })
+            .catch(() => {}) //全攔截不會有catch
+
+        //errs
+        let errs = []
+        if (get(resPage, 'state', '') === 'error') {
+            errs = [
+                ...errs,
+                ...resPage.msg,
+            ]
+        }
+        if (get(resBrowser, 'state', '') === 'error') {
+            errs = [
+                ...errs,
+                ...resBrowser.msg,
+            ]
+        }
+
+        //check
+        if (size(errs) > 0) {
+            return Promise.reject(errs)
+        }
+
+        //check
+        if (!fsIsFile(fpOut)) {
+            return Promise.reject(`no file`)
+        }
 
         //readFileSync
-        b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
+        let b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
 
+        return b64
     }
-    await core()
-        .catch((err) => {
-            console.log(err)
-        })
+
+    //b64
+    let b64 = await core()
 
     //delete
     if (fsIsFile(fpHtml)) {
@@ -387,7 +551,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Mon May 26 2025 14:07:31 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Tue Jun 10 2025 18:59:24 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
