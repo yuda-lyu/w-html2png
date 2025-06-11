@@ -238,22 +238,26 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         }
     }
 
-    //fnOut
-    let fnOut = `./whpic-${now2strp()}-${genID()}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
+    //supplyHtml
+    let supplyHtml = async (fun) => {
+        let errs = []
 
-    //fpOut
-    let fpOut = path.resolve(wd, fnOut)
-    // console.log('fpOut', fpOut)
+        //fnOut
+        let fnOut = `./whpic-${now2strp()}-${genID()}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
 
-    //fnHtml
-    let fnHtml = `./whweb-${now2strp()}-${genID()}.html`
+        //fpOut
+        let fpOut = path.resolve(wd, fnOut)
+        // console.log('fpOut', fpOut)
 
-    //fpHtml
-    let fpHtml = path.resolve(wd, fnHtml)
-    // console.log('fpHtml', fpHtml)
+        //fnHtml
+        let fnHtml = `./whweb-${now2strp()}-${genID()}.html`
 
-    //html
-    let g = `
+        //fpHtml
+        let fpHtml = path.resolve(wd, fnHtml)
+        // console.log('fpHtml', fpHtml)
+
+        //html
+        let g = `
 &lt;!DOCTYPE html>
 &lt;html>
 &lt;head>
@@ -284,16 +288,60 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 &lt;/html>
 `
 
-    //html與style先取代, 避免取代到引入程式碼
-    g = g.replace('{cHtml}', cHtml)
+        //html與style先取代, 避免取代到引入程式碼
+        g = g.replace('{cHtml}', cHtml)
 
-    //引入程式碼
-    g = g.replace('{cScriptsHead}', cScriptsHead)
-    g = g.replace('{cExecJsHead}', cExecJsHead)
-    g = g.replace('{cExecJsPost}', cExecJsPost)
+        //引入程式碼
+        g = g.replace('{cScriptsHead}', cScriptsHead)
+        g = g.replace('{cExecJsHead}', cExecJsHead)
+        g = g.replace('{cExecJsPost}', cExecJsPost)
 
-    //writeFileSync
-    fs.writeFileSync(fpHtml, g, 'utf8')
+        //writeFileSync
+        try {
+            fs.writeFileSync(fpHtml, g, 'utf8')
+        }
+        catch (err) {
+            errs.push(err)
+        }
+
+        //call fun
+        if (size(errs) === 0) {
+            try {
+                let r = fun(fpHtml, fpOut)
+                if (ispm(r)) {
+                    r = await r
+                }
+            }
+            catch (err) {
+                //try catch也能攔截async函數
+                errs.push({
+                    anchor: 'fun(browser)',
+                    err,
+                })
+            }
+        }
+
+        //delete
+        if (fsIsFile(fpHtml)) {
+            fs.unlinkSync(fpHtml)
+        }
+
+        //delete
+        if (fsIsFile(fpOut)) {
+            fs.unlinkSync(fpOut)
+        }
+
+        if (size(errs) > 0) {
+            return {
+                state: 'error',
+                msg: errs,
+            }
+        }
+        return {
+            state: 'success',
+            msg: '',
+        }
+    }
 
     //supplyBrowser
     let supplyBrowser = async (fun) => {
@@ -453,53 +501,96 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //core
     let core = async () => {
+        let errs = []
 
-        //supplyBrowser
-        let resPage = null
+        //b64
+        let b64 = ''
+        let resHtml = null
         let resBrowser = null
-        resBrowser = await supplyBrowser(async(browser) => {
+        let resPage = null
+
+        //supplyHtml
+        resHtml = await supplyHtml(async(fpHtml, fpOut) => {
 
             //supplyPage
-            resPage = await supplyPage(browser, async(page) => {
+            resBrowser = await supplyBrowser(async(browser) => {
 
-                //viewport
-                let viewport = {
-                    x: 0,
-                    y: 0,
-                    width: Number(width),
-                    height: Number(height),
-                    deviceScaleFactor: Number(scale),
-                }
-                //console.log('viewport',viewport)
+                //supplyPage
+                resPage = await supplyPage(browser, async(page) => {
 
-                //show page
-                await page.goto(fpHtml, { waitUntil: 'networkidle0' })
-                await page.setViewport(viewport)
+                    //viewport
+                    let viewport = {
+                        x: 0,
+                        y: 0,
+                        width: Number(width),
+                        height: Number(height),
+                        deviceScaleFactor: Number(scale),
+                    }
+                    //console.log('viewport',viewport)
 
-                // //delay 3s for highchart rendered
-                // await page.waitFor(3000)
+                    //show page
+                    await page.goto(fpHtml, { waitUntil: 'networkidle0' })
+                    await page.setViewport(viewport)
 
-                //screenshot
-                await page.screenshot({ path: fpOut }) //fullPage: true
+                    // //delay 3s for highchart rendered
+                    // await page.waitFor(3000)
+
+                    //screenshot
+                    await page.screenshot({ path: fpOut }) //fullPage: true
+
+                })
+                    .catch(() => {}) //全攔截不會有catch
 
             })
                 .catch(() => {}) //全攔截不會有catch
 
+            //check
+            if (get(resBrowser, 'state', '') === 'error') {
+                return //有錯誤, 已儲存於resBrowser, 不再讀圖成為b64
+            }
+
+            //check
+            if (!fsIsFile(fpOut)) {
+                errs = [
+                    ...errs,
+                    `fpOut is not a file`,
+                ]
+                return //新錯誤, 儲存錯誤至errs, 不再讀圖成為b64
+            }
+
+            //readFileSync
+            try {
+                b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
+            }
+            catch (err) {
+                errs = [
+                    ...errs,
+                    err,
+                ]
+                return //新錯誤, 儲存錯誤至errs, 已無法讀圖成為b64
+            }
+
+            return null
         })
             .catch(() => {}) //全攔截不會有catch
 
-        //errs
-        let errs = []
-        if (get(resPage, 'state', '') === 'error') {
+        //merge errs
+        if (get(resHtml, 'state', '') === 'error') {
             errs = [
                 ...errs,
-                ...resPage.msg,
+                ...resHtml.msg,
             ]
         }
         if (get(resBrowser, 'state', '') === 'error') {
             errs = [
                 ...errs,
                 ...resBrowser.msg,
+            ]
+        }
+        if (get(resPage, 'state', '') === 'error') {
+            errs = [
+                ...errs,
+                ...resPage.msg,
             ]
         }
 
@@ -509,28 +600,19 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         }
 
         //check
-        if (!fsIsFile(fpOut)) {
-            return Promise.reject(`no file`)
+        if (!isestr(b64)) {
+            return Promise.reject(`b64 is not an effective string`)
         }
-
-        //readFileSync
-        let b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
 
         return b64
     }
 
     //b64
     let b64 = await core()
-
-    //delete
-    if (fsIsFile(fpHtml)) {
-        fs.unlinkSync(fpHtml)
-    }
-
-    //delete
-    if (fsIsFile(fpOut)) {
-        fs.unlinkSync(fpOut)
-    }
+    // .catch((err) => { //不用攔截錯誤
+    // })
+    // .finally(() => { //不須最終處理
+    // })
 
     return b64
 }
@@ -551,7 +633,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Tue Jun 10 2025 18:59:24 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Wed Jun 11 2025 20:17:27 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
