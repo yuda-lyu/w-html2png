@@ -240,7 +240,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //supplyHtml
     let supplyHtml = async (fun) => {
-        let errs = []
+        let earrs = []
 
         //fnOut
         let fnOut = `./whpic-${now2strp()}-${genID()}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
@@ -301,14 +301,14 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             fs.writeFileSync(fpHtml, g, 'utf8')
         }
         catch (err) {
-            errs.push({
+            earrs.push({
                 anchor: `fs.writeFileSync(fpHtml, g, 'utf8')`,
                 err,
             })
         }
 
         //call fun
-        if (size(errs) === 0) {
+        if (size(earrs) === 0) {
             try {
                 let r = fun(fpHtml, fpOut)
                 if (ispm(r)) {
@@ -317,7 +317,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             }
             catch (err) {
                 //try catch也能攔截async函數
-                errs.push({
+                earrs.push({
                     anchor: 'fun(fpHtml, fpOut)',
                     err,
                 })
@@ -340,10 +340,10 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             catch (err) {}
         }
 
-        if (size(errs) > 0) {
+        if (size(earrs) > 0) {
             return {
                 state: 'error',
-                msg: errs,
+                msg: earrs,
             }
         }
         return {
@@ -354,7 +354,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //supplyBrowser
     let supplyBrowser = async (fun) => {
-        let errs = []
+        let earrs = []
 
         //puppeteerOpt
         let puppeteerOpt = {
@@ -382,16 +382,15 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
         //browser
         let browser = null
-        await puppeteer.launch(puppeteerOpt)
-            .then((res) => {
-                browser = res
+        try {
+            browser = await puppeteer.launch(puppeteerOpt)
+        }
+        catch (err) {
+            earrs.push({
+                anchor: 'puppeteer.launch(puppeteerOpt)',
+                err,
             })
-            .catch((err) => {
-                errs.push({
-                    anchor: 'puppeteer.launch(puppeteerOpt)',
-                    err,
-                })
-            })
+        }
 
         //call fun
         if (browser !== null) {
@@ -403,7 +402,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             }
             catch (err) {
                 //try catch也能攔截async函數
-                errs.push({
+                earrs.push({
                     anchor: 'fun(browser)',
                     err,
                 })
@@ -417,7 +416,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         //     }
         //     catch (err) {
         //         //不一定能disconnect, 故不紀錄錯誤
-        //         // errs.push({
+        //         // earrs.push({
         //         //     anchor: 'browser.disconnect()',
         //         //     err,
         //         // })
@@ -430,17 +429,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 await browser.close()
             }
             catch (err) {
-                errs.push({
+                earrs.push({
                     anchor: 'browser.close()',
                     err,
                 })
             }
         }
 
-        if (size(errs) > 0) {
+        if (size(earrs) > 0) {
             return {
                 state: 'error',
-                msg: errs,
+                msg: earrs,
             }
         }
         return {
@@ -451,20 +450,19 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //supplyPage
     let supplyPage = async(browser, fun) => {
-        let errs = []
+        let earrs = []
 
         //page
         let page = null
-        await browser.newPage()
-            .then((res) => {
-                page = res
+        try {
+            page = await browser.newPage()
+        }
+        catch (err) {
+            earrs.push({
+                anchor: 'browser.newPage()',
+                err,
             })
-            .catch((err) => {
-                errs.push({
-                    anchor: 'browser.newPage()',
-                    err,
-                })
-            })
+        }
 
         //call fun
         if (page !== null) {
@@ -476,7 +474,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             }
             catch (err) {
                 //try catch也能攔截async函數
-                errs.push({
+                earrs.push({
                     anchor: 'fun(page)',
                     err,
                 })
@@ -489,17 +487,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 await page.close()
             }
             catch (err) {
-                errs.push({
+                earrs.push({
                     anchor: 'page.close()',
                     err,
                 })
             }
         }
 
-        if (size(errs) > 0) {
+        if (size(earrs) > 0) {
             return {
                 state: 'error',
-                msg: errs,
+                msg: earrs,
             }
         }
         return {
@@ -510,7 +508,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //core
     let core = async () => {
-        let errs = []
+        let earrs = []
 
         //b64
         let b64 = ''
@@ -560,9 +558,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
             //check
             if (!fsIsFile(fpOut)) {
-                errs.push({
+                earrs.push({
                     anchor: 'fsIsFile(fpOut)',
-                    err: `fpOut is not a file`,
+                    err: new Error(`no file`),
                 })
                 return //新錯誤, 儲存錯誤至errs並跳出
             }
@@ -572,7 +570,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
             }
             catch (err) {
-                errs.push({
+                earrs.push({
                     anchor: `fs.readFileSync(fpOut, { encoding: 'base64' })`,
                     err,
                 })
@@ -583,29 +581,32 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         })
             .catch(() => {}) //全攔截不會有catch
 
-        //merge errs
+        //merge earrs
         if (get(resHtml, 'state', '') === 'error') {
-            errs = [
-                ...errs,
+            earrs = [
+                ...earrs,
                 ...resHtml.msg,
             ]
         }
         if (get(resBrowser, 'state', '') === 'error') {
-            errs = [
-                ...errs,
+            earrs = [
+                ...earrs,
                 ...resBrowser.msg,
             ]
         }
         if (get(resPage, 'state', '') === 'error') {
-            errs = [
-                ...errs,
+            earrs = [
+                ...earrs,
                 ...resPage.msg,
             ]
         }
 
         //check
-        if (size(errs) > 0) {
-            return Promise.reject(errs)
+        if (size(earrs) > 0) {
+            let earr = earrs[0]
+            // console.log('earrs', earr)
+            let err = `${earr.err.message} in ${earr.anchor}`
+            return Promise.reject(err)
         }
 
         //check
@@ -642,7 +643,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Wed Jun 11 2025 20:29:01 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Mon Jun 16 2025 07:20:21 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
