@@ -62,7 +62,7 @@ import now2strp from 'wsemi/src/now2strp.mjs'
 import genID from 'wsemi/src/genID.mjs'
 import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
-// import fsCopyFolder from 'wsemi/src/fsCopyFolder.mjs'
+import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
 
 
 //已不須自動複製chromium, node_modules/puppeteer/.local-chromium/win64-884014
@@ -238,19 +238,22 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         }
     }
 
+    //id
+    let id = `${now2strp()}-${genID()}`
+
     //supplyHtml
     let supplyHtml = async (fun) => {
         let earrs = []
 
         //fnOut
-        let fnOut = `./whpic-${now2strp()}-${genID()}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
+        let fnOut = `./whpic-${id}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
 
         //fpOut
         let fpOut = path.resolve(wd, fnOut)
         // console.log('fpOut', fpOut)
 
         //fnHtml
-        let fnHtml = `./whweb-${now2strp()}-${genID()}.html`
+        let fnHtml = `./whweb-${id}.html`
 
         //fpHtml
         let fpHtml = path.resolve(wd, fnHtml)
@@ -356,10 +359,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     let supplyBrowser = async (fun) => {
         let earrs = []
 
+        //fd
+        let fd = `./_puppeteer_profile_${id}`
+        // console.log('fd', fd)
+
         //puppeteerOpt
         let puppeteerOpt = {
             headless: modeHeadless,
             slowMo: 20,
+            protocolTimeout: 60 * 1000, //延長 protocol timeout
+            dumpio: true, //印出底層 stdout/stderr
+            userDataDir: fd,
             args: [
                 '--no-sandbox',
                 '--incognito',
@@ -436,6 +446,19 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             }
         }
 
+        //fsDeleteFolderSafe
+        if (true) {
+            try {
+                await fsDeleteFolderSafe(fd)
+            }
+            catch (err) {
+                earrs.push({
+                    anchor: 'fsDeleteFolderSafe(fd)',
+                    err,
+                })
+            }
+        }
+
         if (size(earrs) > 0) {
             return {
                 state: 'error',
@@ -456,6 +479,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         let page = null
         try {
             page = await browser.newPage()
+            page.setDefaultNavigationTimeout(60 * 1000) //延長timeout
         }
         catch (err) {
             earrs.push({
@@ -537,14 +561,23 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     //console.log('viewport',viewport)
 
                     //show page
-                    await page.goto(fpHtml, { waitUntil: 'networkidle0' })
+                    await page.goto(fpHtml, {
+                        waitUntil: [
+                            'domcontentloaded', //HTML 文件完全解析完成時觸發，但不一定等到圖片、樣式或附屬框架全載入也不會等到其他資源完成。它速度最快，但若你依賴圖像或 CSS，這個事件可能太早觸發，使得截圖不完整
+                            'networkidle2', //在 500 毫秒內，網絡連線數不超過 2 條就被視為「較穩定、資料改動已過」，但仍容許少量持續活動（例如輪詢後台資源）
+                        ],
+                        timeout: 60 * 1000, //延長timeout
+                    })
                     await page.setViewport(viewport)
 
                     // //delay 3s for highchart rendered
                     // await page.waitFor(3000)
 
                     //screenshot
-                    await page.screenshot({ path: fpOut }) //fullPage: true
+                    await page.screenshot({
+                        path: fpOut,
+                        timeout: 60 * 1000, //延長timeout
+                    }) //fullPage: true
 
                 })
                     .catch(() => {}) //全攔截不會有catch
@@ -607,6 +640,15 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 ...earrsSpe,
             ]
         }
+        //長期運行可能發生之錯誤:
+        // Navigating frame was detached in fun(page)
+        // Navigation timeout of 30000 ms exceeded in fun(page)
+        // Target.createTarget timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed. in browser.newPage()
+        // Page.captureScreenshot timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed. in fun(page)
+        // Timed out after waiting 30000ms in browser.newPage()
+        // Timed out after 30000 ms while waiting for the WS endpoint URL to appear in stdout! in puppeteer.launch(puppeteerOpt)
+        // EBUSY: resource busy or locked, unlink 'C:\Windows\TEMP\puppeteer_dev_chrome_profile-JqNjnX\first_party_sets.db-journal' in browser.close()
+        // EBUSY: resource busy or locked, unlink 'C:\Windows\TEMP\puppeteer_dev_chrome_profile-vl41VZ\first_party_sets.db' in browser.close()
 
         //check
         if (size(earrs) > 0) {
@@ -650,7 +692,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Fri Jun 20 2025 15:04:19 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Jun 28 2025 15:28:06 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
