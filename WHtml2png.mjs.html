@@ -48,6 +48,7 @@
             <pre class="prettyprint source linenums"><code>import fs from 'fs'
 import path from 'path'
 import puppeteer from 'puppeteer'
+import kill from 'tree-kill'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
 import find from 'lodash-es/find.js'
@@ -56,6 +57,7 @@ import isnum from 'wsemi/src/isnum.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
 import iseobj from 'wsemi/src/iseobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
+import isp0int from 'wsemi/src/isp0int.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
@@ -368,19 +370,22 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         let puppeteerOpt = {
             headless: modeHeadless,
             slowMo: 20,
-            protocolTimeout: 60 * 1000, //延長 protocol timeout
-            dumpio: true, //印出底層 stdout/stderr
+            protocolTimeout: 60 * 1000, //延長protocol timeout
+            dumpio: true, //印出底層stdout/stderr
             userDataDir: fd,
             args: [
+                // '--single-process',
                 '--no-sandbox',
                 '--incognito',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu',
                 '--disable-sync',
                 '--disable-extensions',
-                // '--disable-background-networking',
                 '--disable-default-apps',
+                '--disable-features=VizDisplayCompositor',
+                // '--disable-background-networking',
                 '--metrics-recording-only',
                 '--mute-audio',
                 '--no-first-run',
@@ -393,8 +398,14 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
         //browser
         let browser = null
+        let prc = null
+        let pid = null
         try {
             browser = await puppeteer.launch(puppeteerOpt)
+            prc = browser.process()
+            pid = get(prc, 'pid', '')
+            // console.log('prc', prc)
+            // console.log('pid', pid)
         }
         catch (err) {
             earrs.push({
@@ -444,6 +455,22 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     anchor: 'browser.close()',
                     err,
                 })
+            }
+        }
+
+        //pid
+        if (isp0int(pid)) {
+            try {
+                kill(pid, 'SIGKILL')
+                // console.log('kill', r)
+            }
+            catch (err) {
+                // console.log(err)
+                //若有正常關閉會無法kill pid, 故不須儲存錯誤
+                // earrs.push({
+                //     anchor: `kill(pid, 'SIGKILL')`,
+                //     err,
+                // })
             }
         }
 
@@ -582,13 +609,15 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
                 })
                     .catch((err) => {
-                        fs.writeFileSync(`./_err_supplyPage_${now2strp()}.json`, err.message, 'utf8')
-                    }) //全攔截不會有catch
+                        //已全攔截, 預期不會有catch
+                        fs.writeFileSync(`./_err_${id}_supplyPage.json`, err.message, 'utf8')
+                    })
 
             })
                 .catch((err) => {
-                    fs.writeFileSync(`./_err_supplyBrowser_${now2strp()}.json`, err.message, 'utf8')
-                }) //全攔截不會有catch
+                    //已全攔截, 預期不會有catch
+                    fs.writeFileSync(`./_err_${id}_supplyBrowser.json`, err.message, 'utf8')
+                })
 
             //check
             if (get(resBrowser, 'state', '') === 'error') {
@@ -599,7 +628,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             if (!fsIsFile(fpOut)) {
                 earrsSpe.push({
                     anchor: 'fsIsFile(fpOut)',
-                    err: new Error(`no file`),
+                    err: new Error(`no file[${fpOut}]`),
                 })
                 return //新錯誤, 儲存錯誤至errs並跳出
             }
@@ -619,8 +648,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             return null
         })
             .catch((err) => {
-                fs.writeFileSync(`./_err_supplyHtml_${now2strp()}.json`, err.message, 'utf8')
-            }) //全攔截不會有catch
+                //已全攔截, 預期不會有catch
+                fs.writeFileSync(`./_err_${id}_supplyHtml.json`, err.message, 'utf8')
+            })
 
         //merge earrs
         if (get(resHtml, 'state', '') === 'error') {
@@ -659,15 +689,22 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         // EBUSY: resource busy or locked, unlink 'C:\Windows\TEMP\puppeteer_dev_chrome_profile-vl41VZ\first_party_sets.db' in browser.close()
 
         //check
-        if (fsIsFolder(`./_puppeteer_profile_${id}`)) {
-            fs.writeFileSync(`./_err_fsIsFolder_${now2strp()}.json`, `資料夾[./_puppeteer_profile_${id}]未正常刪除`, 'utf8')
-        }
-
-        //check
         if (size(earrs) > 0) {
+
+            if (true) {
+                let cm = ''
+                each(earrs, (v) => {
+                    let m = get(v, 'err.message', '')
+                    cm += m + '\n'
+                })
+                fs.writeFileSync(`./_err_${id}_earrs.json`, cm, 'utf8')
+            }
+
+            //err
             let earr = earrs[0]
             // console.log('earrs', earr)
             let err = `${earr.err.message} in ${earr.anchor}`
+
             return Promise.reject(err)
         }
 
@@ -681,10 +718,29 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
     //b64
     let b64 = await core()
-    // .catch((err) => { //不用攔截錯誤
-    // })
-    // .finally(() => { //不須最終處理
-    // })
+        // .catch((err) => { //錯誤直接往外傳
+        // })
+        .finally(() => {
+
+            //fnHtml
+            let fnHtml = `./whweb-${id}.html`
+            if (fsIsFile(fnHtml)) {
+                fs.writeFileSync(`./_err_${id}_fsIsFile_fnHtml.json`, `html檔[${fnHtml}]未正常刪除`, 'utf8')
+            }
+
+            //fd
+            let fd = `./_puppeteer_profile_${id}`
+            if (fsIsFolder(fd)) {
+                fs.writeFileSync(`./_err_${id}_fsIsFolder_profile.json`, `profile資料夾[${fd}]未正常刪除`, 'utf8')
+            }
+
+            //fnOut
+            let fnOut = `./whpic-${id}.png`
+            if (fsIsFile(fnOut)) {
+                fs.writeFileSync(`./_err_${id}_fsIsFile_fnPng.json`, `png檔[${fnOut}]未正常刪除`, 'utf8')
+            }
+
+        })
 
     return b64
 }
@@ -705,7 +761,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Tue Jul 01 2025 14:05:47 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Wed Jul 02 2025 15:06:46 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
