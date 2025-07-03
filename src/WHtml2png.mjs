@@ -1,11 +1,9 @@
 import fs from 'fs'
 import path from 'path'
-import axios from 'axios'
 import puppeteer from 'puppeteer'
 import kill from 'tree-kill'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
-import range from 'lodash-es/range.js'
 import size from 'lodash-es/size.js'
 import isnum from 'wsemi/src/isnum.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
@@ -15,17 +13,10 @@ import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import genID from 'wsemi/src/genID.mjs'
-import pmSeries from 'wsemi/src/pmSeries.mjs'
-import fsDownloadFile from 'wsemi/src/fsDownloadFile.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
-import fsMergeFiles from 'wsemi/src/fsMergeFiles.mjs'
-import fsRenameFolder from 'wsemi/src/fsRenameFolder.mjs'
-import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
-import fsDeleteFolder from 'wsemi/src/fsDeleteFolder.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
-import mZip from 'w-zip/src/mZip.mjs'
+import downloadFiles from './downloadFiles.mjs'
 
 
 //調用chrome免安裝版, 須至just-cool.net下載:
@@ -208,67 +199,70 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     //check chrome, 若chrome不存在則由分拆zip檔解壓縮出來用
     if (!fsIsFile(fpExe)) {
 
-        //fpZip
-        let fpZip = `${fdBase}portable.zip`
-        // console.log('fpZip', fpZip)
+        //downloadFiles
+        await downloadFiles(fdBase)
 
-        //fns, fps
-        let fns = []
-        let fps = []
-        each(range(1, 8 + 1), (i) => {
-            let fn = `portable.zip.00${i}`
-            let fp = `${fdBase}${fn}`
-            fns.push(fn)
-            fps.push(fp)
-        })
-        // console.log('fns',fns)
-        // console.log('fps', fps)
+        // //fpZip
+        // let fpZip = `${fdBase}portable.zip`
+        // // console.log('fpZip', fpZip)
 
-        //downloadFile
-        await pmSeries(fns, async(fn, k) => {
+        // //fns, fps
+        // let fns = []
+        // let fps = []
+        // each(range(1, 8 + 1), (i) => {
+        //     let fn = `portable.zip.00${i}`
+        //     let fp = `${fdBase}${fn}`
+        //     fns.push(fn)
+        //     fps.push(fp)
+        // })
+        // // console.log('fns',fns)
+        // // console.log('fps', fps)
 
-            //fp
-            let fp = fps[k]
+        // //downloadFile
+        // await pmSeries(fns, async(fn, k) => {
 
-            //url
-            let url = `https://github.com/yuda-lyu/w-html2png/raw/refs/heads/master/chrome/${fn}`
-            // console.log('url',url)
+        //     //fp
+        //     let fp = fps[k]
 
-            //fsDownloadFile
-            // console.log(`downloading url[${url}]...`,`to fp[${fp}]`)
-            await fsDownloadFile(url, fp)
+        //     //url
+        //     let url = `https://github.com/yuda-lyu/w-html2png/raw/refs/heads/master/chrome/${fn}`
+        //     // console.log('url',url)
 
-        })
+        //     //fsDownloadFile
+        //     // console.log(`downloading url[${url}]...`,`to fp[${fp}]`)
+        //     await fsDownloadFile(url, fp)
 
-        //fsMergeFiles, 完成後會刪除fps
-        await fsMergeFiles(fps, fpZip)
-        // console.log('fpZip', fpZip)
+        // })
 
-        //fdChrome
-        let fdChrome = `${fdBase}temp` //不能直接解壓縮至fdBase, 會導致裡面zip先被清空而無法解壓縮, 此外解壓縮後內會有portable, 須先創建temp去解再把portable移出
-        // console.log('fdChrome', fdChrome)
+        // //fsMergeFiles, 完成後會刪除fps
+        // await fsMergeFiles(fps, fpZip)
+        // // console.log('fpZip', fpZip)
 
-        //unzip
-        if (true) {
-            await mZip.unzip(fpZip, fdChrome)
-            // console.log('mZip.unzip', r)
-        }
+        // //fdChrome
+        // let fdChrome = `${fdBase}temp` //不能直接解壓縮至fdBase, 會導致裡面zip先被清空而無法解壓縮, 此外解壓縮後內會有portable, 須先創建temp去解再把portable移出
+        // // console.log('fdChrome', fdChrome)
 
-        //fsRenameFolder
-        if (true) {
-            let fdSrc = `${fdBase}temp/portable`
-            let fdTar = `${fdBase}portable`
-            // console.log('fdSrc',fdSrc)
-            // console.log('fdTar',fdTar)
-            fsRenameFolder(fdSrc, fdTar)
-            // console.log('fsRenameFolder',r)
-        }
+        // //unzip
+        // if (true) {
+        //     await mZip.unzip(fpZip, fdChrome)
+        //     // console.log('mZip.unzip', r)
+        // }
 
-        //fsDeleteFolder temp
-        fsDeleteFolder(fdChrome)
+        // //fsRenameFolder
+        // if (true) {
+        //     let fdSrc = `${fdBase}temp/portable`
+        //     let fdTar = `${fdBase}portable`
+        //     // console.log('fdSrc',fdSrc)
+        //     // console.log('fdTar',fdTar)
+        //     fsRenameFolder(fdSrc, fdTar)
+        //     // console.log('fsRenameFolder',r)
+        // }
 
-        //fsDeleteFile portable.zip
-        fsDeleteFile(fpZip)
+        // //fsDeleteFolder temp
+        // fsDeleteFolder(fdChrome)
+
+        // //fsDeleteFile portable.zip
+        // fsDeleteFile(fpZip)
 
     }
 
