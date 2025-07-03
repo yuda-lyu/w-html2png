@@ -16,14 +16,32 @@ async function rp() {
         // bNodePolyfill: true,
         // bMinify: false,
         globals: {
-            'fs': 'fs',
             'path': 'path',
+            'fs': 'fs',
+            'stream': 'stream',
+
+            'child_process': 'child_process',
+            'archiver': 'archiver',
+            'archiver-zip-encrypted': 'archiver-zip-encrypted',
+            'unzipper': 'unzipper',
+
             'puppeteer': 'puppeteer',
+            'tree-kill': 'tree-kill',
+
         },
         external: [
-            'fs',
             'path',
+            'fs',
+            'stream',
+
+            'child_process',
+            'archiver',
+            'archiver-zip-encrypted',
+            'unzipper',
+
             'puppeteer',
+            'tree-kill',
+
         ],
     })
         .catch((err) => {
