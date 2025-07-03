@@ -7,8 +7,9 @@ async function init() {
     //fdSrv
     let fdSrv = path.resolve()
 
-    //fdBase, 直接給予安裝套件路徑
-    let fdBase = `${fdSrv}/node_modules/w-html2png/chrome/`
+    //fdBase,
+    // let fdBase = `${fdSrv}/node_modules/w-html2png/chrome/`
+    let fdBase = `${fdSrv}/chrome/` //npm i觸發安裝時, 工作路徑是位於套件w-html2png內
     // console.log('fdBase', fdBase)
 
     //downloadFiles
