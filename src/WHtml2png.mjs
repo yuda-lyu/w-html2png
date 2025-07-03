@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
+import axios from 'axios'
 import puppeteer from 'puppeteer'
 import kill from 'tree-kill'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
-import map from 'lodash-es/map.js'
 import range from 'lodash-es/range.js'
 import size from 'lodash-es/size.js'
 import isnum from 'wsemi/src/isnum.mjs'
@@ -15,10 +15,15 @@ import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import genID from 'wsemi/src/genID.mjs'
+import pmSeries from 'wsemi/src/pmSeries.mjs'
+import fsDownloadFile from 'wsemi/src/fsDownloadFile.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
 import fsMergeFiles from 'wsemi/src/fsMergeFiles.mjs'
+import fsRenameFolder from 'wsemi/src/fsRenameFolder.mjs'
+import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import fsDeleteFolder from 'wsemi/src/fsDeleteFolder.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
 import mZip from 'w-zip/src/mZip.mjs'
 
@@ -183,12 +188,13 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     })
 
     //fdBase
-    let fdBaseSelf = `${fdSrv}/chrome/`
-    let fdBaseDist = `${fdSrv}/node_modules/w-html2png/chrome/`
+    let fdBaseSelf = `${fdSrv}/`
+    let fdBaseDist = `${fdSrv}/node_modules/w-html2png/`
     let fdBase = fdBaseSelf
     if (fsIsFolder(fdBaseDist)) {
         fdBase = fdBaseDist
     }
+    fdBase = `${fdBase}chrome/`
     // console.log('fdBase', fdBase)
 
     //fdExe
@@ -196,45 +202,73 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     // console.log('fdExe', fdExe)
 
     //fpExe
-    let fpExe = path.resolve(fdExe, 'chrome.exe')
+    let fpExe = `${fdExe}chrome.exe`
     // console.log('fpExe', fpExe)
 
     //check chrome, 若chrome不存在則由分拆zip檔解壓縮出來用
     if (!fsIsFile(fpExe)) {
 
         //fpZip
-        let fpZip = path.resolve(fdBase, 'portable.zip')
+        let fpZip = `${fdBase}portable.zip`
         // console.log('fpZip', fpZip)
 
-        //fsMergeFiles to portable.zip
-        let fps = map(range(1, 8 + 1), (i) => {
-            let fp = path.resolve(fdExe, `portable.zip.00${i}`)
-            return fp
+        //fns, fps
+        let fns = []
+        let fps = []
+        each(range(1, 8 + 1), (i) => {
+            let fn = `portable.zip.00${i}`
+            let fp = `${fdBase}${fn}`
+            fns.push(fn)
+            fps.push(fp)
         })
-        await fsMergeFiles(fps, fpZip)
+        // console.log('fns',fns)
         // console.log('fps', fps)
 
+        //downloadFile
+        await pmSeries(fns, async(fn, k) => {
+
+            //fp
+            let fp = fps[k]
+
+            //url
+            let url = `https://github.com/yuda-lyu/w-html2png/raw/refs/heads/master/chrome/${fn}`
+            // console.log('url',url)
+
+            //fsDownloadFile
+            // console.log(`downloading url[${url}]...`,`to fp[${fp}]`)
+            await fsDownloadFile(url, fp)
+
+        })
+
+        //fsMergeFiles, 完成後會刪除fps
+        await fsMergeFiles(fps, fpZip)
+        // console.log('fpZip', fpZip)
+
         //fdChrome
-        let fdChrome = path.resolve(fdExe, 'portable')
+        let fdChrome = `${fdBase}temp` //不能直接解壓縮至fdBase, 會導致裡面zip先被清空而無法解壓縮, 此外解壓縮後內會有portable, 須先創建temp去解再把portable移出
         // console.log('fdChrome', fdChrome)
 
         //unzip
-        await mZip.unzip(fpZip, fdChrome)
-        // console.log('mZip.unzip', r)
+        if (true) {
+            await mZip.unzip(fpZip, fdChrome)
+            // console.log('mZip.unzip', r)
+        }
 
-        // //fsRenameFile ffmpeg.exe
-        // if (true) {
-        //     let fpExeTemp = path.resolve(`${fdChrome}/`, 'portable')
-        //     // console.log('fpExeTemp', fpExeTemp)
-        //     fsRenameFile(fpExeTemp, fpExe)
-        //     // console.log('fsRenameFile', r)
-        // }
+        //fsRenameFolder
+        if (true) {
+            let fdSrc = `${fdBase}temp/portable`
+            let fdTar = `${fdBase}portable`
+            // console.log('fdSrc',fdSrc)
+            // console.log('fdTar',fdTar)
+            fsRenameFolder(fdSrc, fdTar)
+            // console.log('fsRenameFolder',r)
+        }
+
+        //fsDeleteFolder temp
+        fsDeleteFolder(fdChrome)
 
         //fsDeleteFile portable.zip
         fsDeleteFile(fpZip)
-
-        // //fsDeleteFolder temp
-        // fsDeleteFolder(fdChrome)
 
     }
 
@@ -276,14 +310,14 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         let fnOut = `./whpic-${id}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
 
         //fpOut
-        let fpOut = path.resolve(wd, fnOut)
+        let fpOut = path.resolve(wd, fnOut) //bbb
         // console.log('fpOut', fpOut)
 
         //fnHtml
         let fnHtml = `./whweb-${id}.html`
 
         //fpHtml
-        let fpHtml = path.resolve(wd, fnHtml)
+        let fpHtml = path.resolve(wd, fnHtml) //bbb
         // console.log('fpHtml', fpHtml)
 
         //html
