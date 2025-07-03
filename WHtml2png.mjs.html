@@ -51,29 +51,35 @@ import puppeteer from 'puppeteer'
 import kill from 'tree-kill'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
-import find from 'lodash-es/find.js'
+import map from 'lodash-es/map.js'
+import range from 'lodash-es/range.js'
 import size from 'lodash-es/size.js'
 import isnum from 'wsemi/src/isnum.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
-import iseobj from 'wsemi/src/iseobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import isp0int from 'wsemi/src/isp0int.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import genID from 'wsemi/src/genID.mjs'
-import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
+import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import fsMergeFiles from 'wsemi/src/fsMergeFiles.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
+import mZip from 'w-zip/src/mZip.mjs'
 
 
-//已不須自動複製chromium, node_modules/puppeteer/.local-chromium/win64-884014
+//調用chrome免安裝版, 須至just-cool.net下載:
+//https://blog.just-cool.net/google-chrome-portable/
 
 
-//wd
-let wd = process.cwd()
-// console.log('process.cwd()', wd)
+let fdSrv = path.resolve()
+
+
+function isWindows() {
+    return process.platform === 'win32'
+}
 
 
 /**
@@ -88,8 +94,7 @@ let wd = process.cwd()
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
  * @param {String|Array} [opt.execJsHead=''] 輸入插入head內執行js程式碼字串或陣列，預設''
  * @param {String|Array} [opt.execJsPost=''] 輸入於dom末插入執行js程式碼字串或陣列，預設''
- * @param {String} [opt.executablePath=''] 輸入puppeteer的executablePath字串，預設''
- * @param {String} [opt.executableFolder=''] 輸入不提供executablePath時則提供搜索chrome.exe所在資料夾字串，找到後將自動給予puppeteer的executablePath，預設''
+ * @param {String} [opt.executablePath='chrome免安裝版執行檔路徑'] 輸入puppeteer的executablePath字串，預設'chrome免安裝版執行檔路徑'
  * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
  * @example
  *
@@ -133,6 +138,11 @@ let wd = process.cwd()
  */
 async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = {}) {
     // console.log('WHtml2png', width, height, scale, opt)
+
+    //isWindows
+    if (!isWindows()) {
+        return Promise.reject('operating system is not windows')
+    }
 
     //width
     if (!isnum(width)) {
@@ -219,27 +229,88 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         cExecJsPost += c
     })
 
+    //fdBase
+    let fdBaseSelf = `${fdSrv}/chrome/`
+    let fdBaseDist = `${fdSrv}/node_modules/w-html2png/chrome/`
+    let fdBase = fdBaseSelf
+    if (fsIsFolder(fdBaseDist)) {
+        fdBase = fdBaseDist
+    }
+    // console.log('fdBase', fdBase)
+
+    //fdExe
+    let fdExe = `${fdBase}portable/App/Chrome-bin/138.0.7204.97/`
+    // console.log('fdExe', fdExe)
+
+    //fpExe
+    let fpExe = path.resolve(fdExe, 'chrome.exe')
+    // console.log('fpExe', fpExe)
+
+    //check chrome, 若chrome不存在則由分拆zip檔解壓縮出來用
+    if (!fsIsFile(fpExe)) {
+
+        //fpZip
+        let fpZip = path.resolve(fdBase, 'portable.zip')
+        // console.log('fpZip', fpZip)
+
+        //fsMergeFiles to portable.zip
+        let fps = map(range(1, 8 + 1), (i) => {
+            let fp = path.resolve(fdExe, `portable.zip.00${i}`)
+            return fp
+        })
+        await fsMergeFiles(fps, fpZip)
+        // console.log('fps', fps)
+
+        //fdChrome
+        let fdChrome = path.resolve(fdExe, 'portable')
+        // console.log('fdChrome', fdChrome)
+
+        //unzip
+        await mZip.unzip(fpZip, fdChrome)
+        // console.log('mZip.unzip', r)
+
+        // //fsRenameFile ffmpeg.exe
+        // if (true) {
+        //     let fpExeTemp = path.resolve(`${fdChrome}/`, 'portable')
+        //     // console.log('fpExeTemp', fpExeTemp)
+        //     fsRenameFile(fpExeTemp, fpExe)
+        //     // console.log('fsRenameFile', r)
+        // }
+
+        //fsDeleteFile portable.zip
+        fsDeleteFile(fpZip)
+
+        // //fsDeleteFolder temp
+        // fsDeleteFolder(fdChrome)
+
+    }
+
     //executablePath
     let executablePath = get(opt, 'executablePath', '')
-    //若不給則由puppeteer偵測取得或給executableFolder搜尋取得
+    if (!isestr(executablePath)) {
+        executablePath = fpExe //`./portable/App/Chrome-bin/138.0.7204.97/chrome.exe`
+    }
 
     //executableFolder
-    let executableFolder = get(opt, 'executableFolder', '')
-    if (isestr(executableFolder) &amp;&amp; !isestr(executablePath)) {
-        //executablePath='C:\\Users\\user\\.cache\\puppeteer\\chrome\\win64-116.0.5845.96\\chrome-win64\\chrome.exe'
-        //executableFolder='C:\\Users\\user\\.cache\\puppeteer'
-        let fps = fsTreeFolder(executableFolder, null)
-        let r = find(fps, (v) => {
-            return v.name === 'chrome.exe'
-        })
-        // console.log('r', r)
-        if (iseobj(r)) {
-            executablePath = r.path
-        }
-        else {
-            throw new Error(`can not find chrome.exe in executableFolder[${executableFolder}]`)
-        }
-    }
+    // let executableFolder = get(opt, 'executableFolder', '')
+    // if (isestr(executableFolder) &amp;&amp; !isestr(executablePath)) {
+    //     //executablePath='C:\\Users\\user\\.cache\\puppeteer\\chrome\\win64-116.0.5845.96\\chrome-win64\\chrome.exe'
+    //     //executableFolder='C:\\Users\\user\\.cache\\puppeteer'
+    //     let fps = fsTreeFolder(executableFolder, null)
+    //     let r = find(fps, (v) => {
+    //         return v.name === 'chrome.exe'
+    //     })
+    //     // console.log('r', r)
+    //     if (iseobj(r)) {
+    //         executablePath = r.path
+    //     }
+    //     else {
+    //         throw new Error(`can not find chrome.exe in executableFolder[${executableFolder}]`)
+    //     }
+    // }
+
+    //wd
+    let wd = process.cwd()
 
     //id
     let id = `${now2strp()}-${genID()}`
@@ -371,7 +442,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             headless: modeHeadless,
             slowMo: 20,
             protocolTimeout: 60 * 1000, //延長protocol timeout
-            dumpio: true, //印出底層stdout/stderr
+            // dumpio: true, //console.log chrome的stdout/stderr訊息
             userDataDir: fd,
             args: [
                 // '--single-process',
@@ -390,11 +461,16 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 '--mute-audio',
                 '--no-first-run',
                 '--safebrowsing-disable-auto-update',
+                // '--log-level=3', //強制免安裝chrome不顯示info,debug
             ],
+            // stdio: 'ignore', //強制免安裝chrome不顯示stdio
+            // stdout: 'ignore', //強制免安裝chrome不顯示stdout
+            // stderr: 'ignore', //強制免安裝chrome不顯示stderr
         }
         if (isestr(executablePath)) {
             puppeteerOpt.executablePath = executablePath
         }
+        // console.log('puppeteerOpt.executablePath', puppeteerOpt.executablePath)
 
         //browser
         let browser = null
@@ -761,7 +837,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Wed Jul 02 2025 15:06:46 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Thu Jul 03 2025 15:22:52 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
