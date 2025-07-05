@@ -468,8 +468,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 //pid
                 if (isp0int(pid)) {
                     await execProcessKillPid(pid)
-                        .catch((err) => {
-                            console.log('execProcessKillPid cathc', err)
+                        .catch(() => {
+                            // console.log('execProcessKillPid catch', err)
                         })
                 }
 
