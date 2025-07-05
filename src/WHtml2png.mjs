@@ -1,7 +1,6 @@
 import fs from 'fs'
 import path from 'path'
 import puppeteer from 'puppeteer'
-import kill from 'tree-kill'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
 import size from 'lodash-es/size.js'
@@ -19,6 +18,7 @@ import genID from 'wsemi/src/genID.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
+import execProcessKillPid from 'wsemi/src/execProcessKillPid.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
 
 
@@ -467,18 +467,10 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
                 //pid
                 if (isp0int(pid)) {
-                    try {
-                        kill(pid, 'SIGKILL')
-                        // console.log('kill', r)
-                    }
-                    catch (err) {
-                        // console.log(err)
-                        //若有正常關閉會無法kill pid, 故不須儲存錯誤
-                        // earrs.push({
-                        //     anchor: `kill(pid, 'SIGKILL')`,
-                        //     err,
-                        // })
-                    }
+                    await execProcessKillPid(pid)
+                        .catch((err) => {
+                            console.log('execProcessKillPid cathc', err)
+                        })
                 }
 
                 //fsDeleteFolderSafe
