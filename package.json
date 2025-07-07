@@ -1,13 +1,13 @@
 {
   "name": "w-html2png",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "axios": "^1.10.0",
     "lodash-es": "^4.17.21",
     "puppeteer": "^24.11.2",
-    "w-zip": "^1.0.19",
-    "wsemi": "^1.8.10"
+    "w-zip": "^1.0.20",
+    "wsemi": "^1.8.11"
   },
   "devDependencies": {
     "w-package-tools": "^1.1.2"

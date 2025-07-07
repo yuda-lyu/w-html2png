@@ -65,8 +65,10 @@ import genID from 'wsemi/src/genID.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import execProcessKillPid from 'wsemi/src/execProcessKillPid.mjs'
+import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import fsDeleteFolder from 'wsemi/src/fsDeleteFolder.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
+import execProcessKillPid from 'wsemi/src/execProcessKillPid.mjs'
 
 
 //調用chrome免安裝版, 須至just-cool.net下載:
@@ -295,20 +297,18 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             let supplyHtml = async (fun) => {
                 let earrs = []
 
-                //fnOut
-                let fnOut = `./whpic_${id}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
+                //_fpPng
+                let _fpPng = `./whpic_${id}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
 
-                //fpOut
-                // let fpOut = path.resolve(wd, fnOut)
-                let fpOut = path.resolve(fnOut)
-                // console.log('fpOut', fpOut)
+                //fpPng
+                let fpPng = path.resolve(_fpPng)
+                // console.log('fpPng', fpPng)
 
-                //fnHtml
-                let fnHtml = `./whweb_${id}.html`
+                //_fpHtml
+                let _fpHtml = `./whweb_${id}.html`
 
                 //fpHtml
-                // let fpHtml = path.resolve(wd, fnHtml)
-                let fpHtml = path.resolve(fnHtml)
+                let fpHtml = path.resolve(_fpHtml)
                 // console.log('fpHtml', fpHtml)
 
                 //html
@@ -365,7 +365,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 //call fun
                 if (size(earrs) === 0) {
                     try {
-                        let r = fun(fpHtml, fpOut)
+                        let r = fun(fpHtml, fpPng)
                         if (ispm(r)) {
                             r = await r
                         }
@@ -373,7 +373,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     catch (err) {
                         //try catch也能攔截async函數
                         earrs.push({
-                            anchor: 'fun(fpHtml, fpOut)',
+                            anchor: 'fun(fpHtml, fpPng)',
                             err,
                         })
                     }
@@ -388,9 +388,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 }
 
                 //delete
-                if (fsIsFile(fpOut)) {
+                if (fsIsFile(fpPng)) {
                     try {
-                        fs.unlinkSync(fpOut)
+                        fs.unlinkSync(fpPng)
                     }
                     catch (err) {}
                 }
@@ -411,8 +411,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             let supplyBrowser = async (fun) => {
                 let earrs = []
 
-                //fd
-                let fd = `./_puppeteer_profile_${id}`
+                //fdProfile
+                let fdProfile = `./_puppeteer_profile_${id}`
                 // console.log('fd', fd)
 
                 //puppeteerOpt
@@ -421,7 +421,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     slowMo: 20,
                     protocolTimeout: 60 * 1000, //延長protocol timeout
                     // dumpio: true, //console.log chrome的stdout/stderr訊息
-                    userDataDir: fd,
+                    userDataDir: fdProfile,
                     args: [
                         // '--single-process',
                         '--no-sandbox',
@@ -523,7 +523,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 //fsDeleteFolderSafe
                 if (true) {
                     try {
-                        await fsDeleteFolderSafe(fd)
+                        await fsDeleteFolderSafe(fdProfile)
                     }
                     catch (err) {
                         earrs.push({
@@ -611,7 +611,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             let resPage = null
 
             //supplyHtml
-            resHtml = await supplyHtml(async(fpHtml, fpOut) => {
+            resHtml = await supplyHtml(async(fpHtml, fpPng) => {
 
                 //supplyPage
                 resBrowser = await supplyBrowser(async(browser) => {
@@ -644,7 +644,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
                         //screenshot
                         await page.screenshot({
-                            path: fpOut,
+                            path: fpPng,
                             timeout: 60 * 1000, //延長timeout
                         })
 
@@ -669,22 +669,22 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     return //有錯誤, 錯誤已儲存於resBrowser故直接跳出
                 }
 
-                //check, chrome雖未出錯, 但仍有可能screenshot時未能存出fpOut, 故須此處偵測
-                if (!fsIsFile(fpOut)) {
+                //check, chrome雖未出錯, 但仍有可能screenshot時未能存出fpPng, 故須此處偵測
+                if (!fsIsFile(fpPng)) {
                     earrsSpe.push({
-                        anchor: 'fsIsFile(fpOut)',
-                        err: new Error(`no file[${fpOut}]`),
+                        anchor: 'fsIsFile(fpPng)',
+                        err: new Error(`no file[${fpPng}]`),
                     })
                     return //新錯誤, 儲存錯誤至errs並跳出
                 }
 
                 //readFileSync
                 try {
-                    b64 = fs.readFileSync(fpOut, { encoding: 'base64' })
+                    b64 = fs.readFileSync(fpPng, { encoding: 'base64' })
                 }
                 catch (err) {
                     earrsSpe.push({
-                        anchor: `fs.readFileSync(fpOut, { encoding: 'base64' })`,
+                        anchor: `fs.readFileSync(fpPng, { encoding: 'base64' })`,
                         err,
                     })
                     return //新錯誤, 儲存錯誤至errs並跳出
@@ -772,22 +772,31 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             })
             .finally(() => {
 
-                //fnHtml
-                let fnHtml = `./whweb_${id}.html`
-                if (writeError &amp;&amp; fsIsFile(fnHtml)) {
-                    fs.writeFileSync(`./_err_${id}_fnHtml.json`, `can not delete html[${fnHtml}]`, 'utf8')
+                //_fpHtml
+                let _fpHtml = `./whweb_${id}.html`
+                if (fsIsFile(_fpHtml)) {
+                    if (writeError) {
+                        fs.writeFileSync(`./_err_${id}_fpHtml.json`, `can not delete html[${_fpHtml}]`, 'utf8')
+                    }
+                    fsDeleteFile(_fpHtml)
                 }
 
-                //fd
-                let fd = `./_puppeteer_profile_${id}`
-                if (writeError &amp;&amp; fsIsFolder(fd)) {
-                    fs.writeFileSync(`./_err_${id}_profile.json`, `can not delete profile[${fd}]`, 'utf8')
+                //fdProfile
+                let fdProfile = `./_puppeteer_profile_${id}`
+                if (fsIsFolder(fdProfile)) {
+                    if (writeError) {
+                        fs.writeFileSync(`./_err_${id}_profile.json`, `can not delete profile[${fdProfile}]`, 'utf8')
+                    }
+                    fsDeleteFolder(fdProfile)
                 }
 
-                //fnOut
-                let fnOut = `./whpic_${id}.png`
-                if (writeError &amp;&amp; fsIsFile(fnOut)) {
-                    fs.writeFileSync(`./_err_${id}_fnPng.json`, `can not delete png[${fnOut}]`, 'utf8')
+                //_fpPng
+                let _fpPng = `./whpic_${id}.png`
+                if (fsIsFile(_fpPng)) {
+                    if (writeError) {
+                        fs.writeFileSync(`./_err_${id}_fpPng.json`, `can not delete png[${_fpPng}]`, 'utf8')
+                    }
+                    fsDeleteFile(_fpPng)
                 }
 
             })
@@ -867,7 +876,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Jul 05 2025 19:45:08 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Mon Jul 07 2025 12:47:12 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
