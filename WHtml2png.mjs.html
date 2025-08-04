@@ -60,8 +60,7 @@ import isbol from 'wsemi/src/isbol.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import cint from 'wsemi/src/cint.mjs'
-import now2strp from 'wsemi/src/now2strp.mjs'
-import genID from 'wsemi/src/genID.mjs'
+import genIDSeq from 'wsemi/src/genIDSeq.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -97,6 +96,10 @@ function isWindows() {
  * @param {String|Array} [opt.execJsPost=''] 輸入於dom末插入執行js程式碼字串或陣列，預設''
  * @param {Integer} [opt.retry=3] 輸入失敗重試次數整數，預設3
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
+ * @param {String} [opt.fdPng='./_convertTemp'] 輸入臨時儲存圖片png檔之資料夾位置字串，預設'./_convertTemp'
+ * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串，預設'./_convertTemp'
+ * @param {String} [opt.fdProfile='./_convertTemp'] 輸入臨時儲存瀏覽器使用者資料之資料夾位置字串，預設'./_convertTemp'
+ * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串，預設'./_convertTemp'
  * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
  * @example
  *
@@ -271,8 +274,32 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         writeError = false
     }
 
+    //fdPng
+    let fdPng = get(opt, 'fdPng')
+    if (!isestr(fdPng)) {
+        fdPng = './_convertTemp'
+    }
+
+    //fdHtml
+    let fdHtml = get(opt, 'fdHtml')
+    if (!isestr(fdHtml)) {
+        fdHtml = './_convertTemp'
+    }
+
+    //fdProfile
+    let fdProfile = get(opt, 'fdProfile')
+    if (!isestr(fdProfile)) {
+        fdProfile = './_convertTemp'
+    }
+
+    //fdErr
+    let fdErr = get(opt, 'fdErr')
+    if (!isestr(fdErr)) {
+        fdErr = './_convertTemp'
+    }
+
     //idpm
-    let idpm = `${now2strp()}-${genID()}`
+    let idpm = `${genIDSeq()}`
 
     //iCore
     let iCore = 0
@@ -297,18 +324,12 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             let supplyHtml = async (fun) => {
                 let earrs = []
 
-                //_fpPng
-                let _fpPng = `./whpic_${id}.png` //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
-
                 //fpPng
-                let fpPng = path.resolve(_fpPng)
+                let fpPng = path.resolve(fdPng, `whpic_${id}.png`) //一定要給副檔名, 否則puppeteer的screenshot會無法識別格式
                 // console.log('fpPng', fpPng)
 
-                //_fpHtml
-                let _fpHtml = `./whweb_${id}.html`
-
                 //fpHtml
-                let fpHtml = path.resolve(_fpHtml)
+                let fpHtml = path.resolve(fdHtml, `whweb_${id}.html`)
                 // console.log('fpHtml', fpHtml)
 
                 //html
@@ -411,9 +432,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             let supplyBrowser = async (fun) => {
                 let earrs = []
 
-                //fdProfile
-                let fdProfile = `./_puppeteer_profile_${id}`
-                // console.log('fd', fd)
+                //fdUserData
+                let fdUserData = path.resolve(fdProfile, `profile_${id}`)
+                // console.log('fdUserData', fdUserData)
 
                 //puppeteerOpt
                 let puppeteerOpt = {
@@ -421,7 +442,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                     slowMo: 20,
                     protocolTimeout: 60 * 1000, //延長protocol timeout
                     // dumpio: true, //console.log chrome的stdout/stderr訊息
-                    userDataDir: fdProfile,
+                    userDataDir: fdUserData,
                     args: [
                         // '--single-process',
                         '--no-sandbox',
@@ -523,7 +544,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 //fsDeleteFolderSafe
                 if (true) {
                     try {
-                        await fsDeleteFolderSafe(fdProfile)
+                        await fsDeleteFolderSafe(fdUserData)
                     }
                     catch (err) {
                         earrs.push({
@@ -748,7 +769,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
 
                 //writeFileSync
                 if (writeError) {
-                    fs.writeFileSync(`./_err_${id}_all.json`, cearrs, 'utf8')
+                    let fpJson = path.resolve(fdErr, `err_${id}_all.json`)
+                    fs.writeFileSync(fpJson, cearrs, 'utf8')
                 }
 
                 return Promise.reject(cearrs)
@@ -772,31 +794,34 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             })
             .finally(() => {
 
-                //_fpHtml
-                let _fpHtml = `./whweb_${id}.html`
-                if (fsIsFile(_fpHtml)) {
-                    if (writeError) {
-                        fs.writeFileSync(`./_err_${id}_fpHtml.json`, `can not delete html[${_fpHtml}]`, 'utf8')
-                    }
-                    fsDeleteFile(_fpHtml)
+                //fpHtml
+                let fpHtml = path.resolve(fdHtml, `whweb_${id}.html`)
+                if (fsIsFile(fpHtml)) {
+                    fsDeleteFile(fpHtml)
+                }
+                if (fsIsFile(fpHtml) &amp;&amp; writeError) {
+                    let fpJson = path.resolve(fdErr, `err_${id}_fpHtml.json`)
+                    fs.writeFileSync(fpJson, `can not delete html[whweb_${id}.html}]`, 'utf8')
                 }
 
-                //fdProfile
-                let fdProfile = `./_puppeteer_profile_${id}`
-                if (fsIsFolder(fdProfile)) {
-                    if (writeError) {
-                        fs.writeFileSync(`./_err_${id}_profile.json`, `can not delete profile[${fdProfile}]`, 'utf8')
-                    }
-                    fsDeleteFolder(fdProfile)
+                //fdUserData
+                let fdUserData = path.resolve(fdProfile, `profile_${id}`)
+                if (fsIsFolder(fdUserData)) {
+                    fsDeleteFolder(fdUserData)
+                }
+                if (fsIsFolder(fdUserData) &amp;&amp; writeError) {
+                    let fpJson = path.resolve(fdErr, `err_${id}_fdUserData.json`)
+                    fs.writeFileSync(fpJson, `can not delete fdUserData[profile_${id}]`, 'utf8')
                 }
 
-                //_fpPng
-                let _fpPng = `./whpic_${id}.png`
-                if (fsIsFile(_fpPng)) {
-                    if (writeError) {
-                        fs.writeFileSync(`./_err_${id}_fpPng.json`, `can not delete png[${_fpPng}]`, 'utf8')
-                    }
-                    fsDeleteFile(_fpPng)
+                //fpPng
+                let fpPng = path.resolve(fdPng, `whpic_${id}.png`)
+                if (fsIsFile(fpPng)) {
+                    fsDeleteFile(fpPng)
+                }
+                if (fsIsFile(fpPng) &amp;&amp; writeError) {
+                    let fpJson = path.resolve(fdErr, `err_${id}_fpPng.json`)
+                    fs.writeFileSync(fpJson, `can not delete png[whpic_${id}.png]`, 'utf8')
                 }
 
             })
@@ -876,7 +901,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Mon Jul 07 2025 12:47:12 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Mon Aug 04 2025 19:25:30 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
