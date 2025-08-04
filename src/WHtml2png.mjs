@@ -17,6 +17,7 @@ import genIDSeq from 'wsemi/src/genIDSeq.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
+import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
 import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
 import fsDeleteFolder from 'wsemi/src/fsDeleteFolder.mjs'
 import fsDeleteFolderSafe from 'wsemi/src/fsDeleteFolderSafe.mjs'
@@ -232,11 +233,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isestr(fdPng)) {
         fdPng = './_convertTemp'
     }
+    if (!fsIsFolder(fdPng)) {
+        fsCreateFolder(fdPng)
+    }
 
     //fdHtml
     let fdHtml = get(opt, 'fdHtml')
     if (!isestr(fdHtml)) {
         fdHtml = './_convertTemp'
+    }
+    if (!fsIsFolder(fdHtml)) {
+        fsCreateFolder(fdHtml)
     }
 
     //fdProfile
@@ -244,11 +251,17 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isestr(fdProfile)) {
         fdProfile = './_convertTemp'
     }
+    if (!fsIsFolder(fdProfile)) {
+        fsCreateFolder(fdProfile)
+    }
 
     //fdErr
     let fdErr = get(opt, 'fdErr')
     if (!isestr(fdErr)) {
         fdErr = './_convertTemp'
+    }
+    if (!fsIsFolder(fdErr)) {
+        fsCreateFolder(fdErr)
     }
 
     //idpm
