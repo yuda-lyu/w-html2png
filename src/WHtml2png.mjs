@@ -13,7 +13,8 @@ import isbol from 'wsemi/src/isbol.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import cint from 'wsemi/src/cint.mjs'
-import genIDSeq from 'wsemi/src/genIDSeq.mjs'
+import genID from 'wsemi/src/genID.mjs'
+import now2strp from 'wsemi/src/now2strp.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -265,7 +266,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     }
 
     //idpm
-    let idpm = `${genIDSeq()}`
+    let idpm = `${now2strp()}-${genID(6)}`
 
     //iCore
     let iCore = 0
@@ -736,6 +737,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 //writeFileSync
                 if (writeError) {
                     let fpJson = path.resolve(fdErr, `err_${id}_all.json`)
+                    // console.log('fpJson', fpJson)
                     fs.writeFileSync(fpJson, cearrs, 'utf8')
                 }
 
