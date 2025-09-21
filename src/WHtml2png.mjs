@@ -10,6 +10,7 @@ import isestr from 'wsemi/src/isestr.mjs'
 import isp0int from 'wsemi/src/isp0int.mjs'
 import ispint from 'wsemi/src/ispint.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import cint from 'wsemi/src/cint.mjs'
@@ -182,6 +183,9 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isearr(execJsPost)) {
         execJsPost = []
     }
+
+    //funGetUrl
+    let funGetUrl = get(opt, 'funGetUrl')
 
     //cExecJsPost
     let cExecJsPost = ''
@@ -601,6 +605,15 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
             //supplyHtml
             resHtml = await supplyHtml(async(fpHtml, fpPng) => {
 
+                //url
+                let url = fpHtml
+                if (isfun(funGetUrl)) {
+                    url = funGetUrl(fpHtml)
+                    if (ispm(url)) {
+                        url = await url
+                    }
+                }
+
                 //supplyPage
                 resBrowser = await supplyBrowser(async(browser) => {
 
@@ -618,7 +631,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                         //console.log('viewport',viewport)
 
                         //show page
-                        await page.goto(fpHtml, {
+                        await page.goto(url, {
                             waitUntil: [
                                 'domcontentloaded', //HTML 文件完全解析完成時觸發，但不一定等到圖片、樣式或附屬框架全載入也不會等到其他資源完成。它速度最快，但若你依賴圖像或 CSS，這個事件可能太早觸發，使得截圖不完整
                                 'networkidle2', //在 500 毫秒內，網絡連線數不超過 2 條就被視為「較穩定、資料改動已過」，但仍容許少量持續活動（例如輪詢後台資源）
