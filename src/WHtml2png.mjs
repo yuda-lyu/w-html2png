@@ -47,9 +47,12 @@ function isWindows() {
  * @param {Number} [scale=3] 輸入欲將圖片放大比例數字，單位px，預設3
  * @param {String} [html=''] 輸入HTML字串，預設''
  * @param {Object} [opt={}] 輸入設定物件，預設{}
+ * @param {Array} [opt.stylesHead=[]] 輸入引用css程式碼網址陣列，預設[]
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
  * @param {String|Array} [opt.execJsHead=''] 輸入插入head內執行js程式碼字串或陣列，預設''
  * @param {String|Array} [opt.execJsPost=''] 輸入於dom末插入執行js程式碼字串或陣列，預設''
+ * @param {Function} [opt.funGetUrl=null] 輸入轉換goto所使用本機網址(fpHtml)成為url之函數，預設null
+ * @param {Function} [opt.funPageWait=null] 輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，預設null
  * @param {Integer} [opt.retry=3] 輸入失敗重試次數整數，預設3
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
  * @param {String} [opt.fdPng='./_convertTemp'] 輸入臨時儲存圖片png檔之資料夾位置字串，預設'./_convertTemp'
@@ -110,7 +113,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isnum(width)) {
         return Promise.reject('width is not a number')
     }
-    width = cdbl(width)
+    width = cint(width)
     if (width <= 0) {
         return Promise.reject('width <= 0')
     }
@@ -119,7 +122,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     if (!isnum(height)) {
         return Promise.reject('height is not a number')
     }
-    height = cdbl(height)
+    height = cint(height)
     if (height <= 0) {
         return Promise.reject('height <= 0')
     }
@@ -145,6 +148,19 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         modeHeadless = 'new' //無頭, 不顯示UI
         // modeHeadless = false //顯示UI
     }
+
+    //stylesHead
+    let stylesHead = get(opt, 'stylesHead')
+    if (!isearr(stylesHead)) {
+        stylesHead = []
+    }
+
+    //cStylesHead
+    let cStylesHead = ''
+    each(stylesHead, (v) => {
+        let c = `<link href="${v}" rel="stylesheet" />`
+        cStylesHead += c
+    })
 
     //scriptsHead
     let scriptsHead = get(opt, 'scriptsHead')
@@ -184,15 +200,18 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
         execJsPost = []
     }
 
-    //funGetUrl
-    let funGetUrl = get(opt, 'funGetUrl')
-
     //cExecJsPost
     let cExecJsPost = ''
     each(execJsPost, (v) => {
         let c = `<script>${v}</script>\n\n`
         cExecJsPost += c
     })
+
+    //funGetUrl
+    let funGetUrl = get(opt, 'funGetUrl')
+
+    //funPageWait
+    let funPageWait = get(opt, 'funPageWait')
 
     //fdBase
     let fdBaseSelf = `${fdSrv}/chrome/`
@@ -311,6 +330,8 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
   <meta charset="UTF-8">
   <title>highcharts to png</title>
 
+  {cStylesHead}
+
   <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.js"></script>
@@ -339,6 +360,7 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                 g = g.replace('{cHtml}', cHtml)
 
                 //引入程式碼
+                g = g.replace('{cStylesHead}', cStylesHead)
                 g = g.replace('{cScriptsHead}', cScriptsHead)
                 g = g.replace('{cExecJsHead}', cExecJsHead)
                 g = g.replace('{cExecJsPost}', cExecJsPost)
@@ -640,8 +662,10 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
                         })
                         await page.setViewport(viewport)
 
-                        // //delay 3s for highchart rendered
-                        // await page.waitFor(3000)
+                        //delay
+                        if (isfun(funPageWait)) {
+                            await page.waitForFunction(funPageWait, { polling: 200, timeout: 60 * 1000 }) //200ms偵測一次, 延長timeout
+                        }
 
                         //screenshot
                         await page.screenshot({
