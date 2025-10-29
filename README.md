@@ -12,6 +12,7 @@ A package for html to png by chromium.
 To view documentation or get support, visit [docs](https://yuda-lyu.github.io/w-html2png/WHtml2png.html).
 
 ## Installation
+
 ### Using npm(ES6 module):
 ```alias
 npm i w-html2png
