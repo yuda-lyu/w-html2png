@@ -12,7 +12,8 @@ async function rp() {
         fns: 'WHtml2png.mjs',
         fdSrc,
         fdTar,
-        nameDistType: 'kebabCase',
+        hookNameDist: () => 'w-html2png',
+        // nameDistType: 'kebabCase', //直接由hookNameDist給予
         // bNodePolyfill: true,
         // bMinify: false,
         globals: {
