@@ -8,7 +8,7 @@ function isWindows() {
 }
 
 
-async function testa() {
+async function testa(opt = {}) {
 
     let html = `
 <div style="padding:10px; display:inline-block;">
@@ -33,7 +33,7 @@ async function testa() {
     let height = 235
     let scale = 3
 
-    let ret = await WHtml2png(width, height, scale, html)
+    let ret = await WHtml2png(width, height, scale, html, opt)
     // fs.writeFileSync('./test/test-scla.b64', b64, 'utf8')
 
     let ans = fs.readFileSync('./test/test-scla.b64', 'utf8')
@@ -88,11 +88,31 @@ async function testb() {
 
 describe(`WHtml2png`, function() {
 
+    after(async function() {
+        //關閉常駐瀏覽器, 使測試結束後Node行程可立即退出
+        await WHtml2png.close()
+    })
+
     it(`should return (base64) when run testa `, async function() {
         let rr = null
         let rt = null
         if (isWindows()) {
             let t = await testa()
+            rr = t.ret
+            rt = t.ans
+        }
+        else {
+            rr = 1
+            rt = 1
+        }
+        assert.strict.deepStrictEqual(rr, rt)
+    })
+
+    it(`should return (base64) when run testa with mode='alive' `, async function() {
+        let rr = null
+        let rt = null
+        if (isWindows()) {
+            let t = await testa({ mode: 'alive' })
             rr = t.ret
             rt = t.ans
         }

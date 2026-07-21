@@ -19,30 +19,12 @@ async function rp() {
         globals: {
             'path': 'path',
             'fs': 'fs',
-            'stream': 'stream',
-
-            'child_process': 'child_process',
-            'archiver': 'archiver',
-            'archiver-zip-encrypted': 'archiver-zip-encrypted',
-            'unzipper': 'unzipper',
-
-            'puppeteer': 'puppeteer',
-            'tree-kill': 'tree-kill',
-
+            'playwright-core': 'playwright-core',
         },
         external: [
             'path',
             'fs',
-            'stream',
-
-            'child_process',
-            'archiver',
-            'archiver-zip-encrypted',
-            'unzipper',
-
-            'puppeteer',
-            'tree-kill',
-
+            'playwright-core',
         ],
     })
         .catch((err) => {
