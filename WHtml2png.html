@@ -74,13 +74,17 @@
 <dl class="details">
     
     <dt class="tag-description">Description:</dt>
-    <dd class="tag-description"><ul class="dummy"><li><p>呼叫Chromium轉Html為png圖</p></li></ul></dd>
+    <dd class="tag-description"><ul class="dummy"><li><p>呼叫Chromium轉Html為png圖</p>
+<p>提供兩種瀏覽器使用模式(opt.mode):
+'single'為每次呼叫啟動新瀏覽器, 出圖後即關閉釋放, Node行程可自然結束, 適合排程批次;
+'alive'為常駐瀏覽器, 第一次呼叫時啟動, 同行程後續呼叫重用故出圖較快, 閒置超過1小時自動關閉,
+批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出</p></li></ul></dd>
     
 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line104">line 104</a>
+        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line857">line 857</a>
     </li></ul></dd>
     
 
@@ -127,7 +131,43 @@
 
     <h5 class="h5-examples">Example</h5>
     
-    <pre class="prettyprint"><code>async function testa() {    let html = `&lt;div style="padding:10px; display:inline-block;">    &lt;div style="background-color: rgb(255, 255, 255); border-radius: 5px; width: 600px; box-shadow:0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);">        &lt;div style="padding: 20px; border-bottom: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 5px 5px 0px 0px; display: flex; justify-content: flex-start; align-items: center;">            &lt;div>                &lt;div style="font-size: 2rem;">Panel Title&lt;/div>            &lt;/div>        &lt;/div>        &lt;div style="border-radius: 0px;">            &lt;div style="padding: 20px;">                Here is a panel content, Morbi mattis ullamcorper velit. Donec orci lectus, aliquam ut, faucibus non, euismod id, nulla. In ut quam vitae odio lacinia tincidunt.            &lt;/div>        &lt;/div>        &lt;div style="padding: 20px; border-top: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 0px 0px 5px 5px;">            Here is a panel footer        &lt;/div>    &lt;/div>&lt;/div>    `    let width = 620    let height = 235    let scale = 3    let b64 = await WHtml2png(width, height, scale, html)    // console.log('b64', b64)    // fs.writeFileSync('./test-scla.b64', b64, 'utf8')    fs.writeFileSync('./test-scla.png', b64, { encoding: 'base64' })    console.log('finish')}testa()    .catch((err) => {        console.log(err)    })</code></pre>
+    <pre class="prettyprint"><code>async function testa() {
+
+    let html = `
+&lt;div style="padding:10px; display:inline-block;">
+    &lt;div style="background-color: rgb(255, 255, 255); border-radius: 5px; width: 600px; box-shadow:0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);">
+        &lt;div style="padding: 20px; border-bottom: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 5px 5px 0px 0px; display: flex; justify-content: flex-start; align-items: center;">
+            &lt;div>
+                &lt;div style="font-size: 2rem;">Panel Title&lt;/div>
+            &lt;/div>
+        &lt;/div>
+        &lt;div style="border-radius: 0px;">
+            &lt;div style="padding: 20px;">
+                Here is a panel content, Morbi mattis ullamcorper velit. Donec orci lectus, aliquam ut, faucibus non, euismod id, nulla. In ut quam vitae odio lacinia tincidunt.
+            &lt;/div>
+        &lt;/div>
+        &lt;div style="padding: 20px; border-top: 1px solid rgb(221, 221, 221); background-color: rgb(250, 250, 250); border-radius: 0px 0px 5px 5px;">
+            Here is a panel footer
+        &lt;/div>
+    &lt;/div>
+&lt;/div>
+    `
+    let width = 620
+    let height = 235
+    let scale = 3
+
+    let b64 = await WHtml2png(width, height, scale, html)
+    // console.log('b64', b64)
+
+    // fs.writeFileSync('./test-scla.b64', b64, 'utf8')
+    fs.writeFileSync('./test-scla.png', b64, { encoding: 'base64' })
+
+    console.log('finish')
+}
+testa()
+    .catch((err) => {
+        console.log(err)
+    })</code></pre>
 
 
 
@@ -380,6 +420,86 @@
     </thead>
 
     <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>mode</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'single'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入瀏覽器使用模式字串，'single'代表每次呼叫啟閉瀏覽器，'alive'代表常駐瀏覽器供同行程重用，預設'single'</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>executablePath</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>''</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等，未給則使用套件自帶之免安裝chrome；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔，欲切換須先呼叫WHtml2png.close()，預設''</p></td>
+        </tr>
+
     
 
         <tr>
@@ -710,46 +830,6 @@
 
         <tr>
             
-                <td class="name"><code>fdPng</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type">String</span>
-
-
-
-            
-            </td>
-
-            
-                <td class="attributes">
-                
-                    &lt;optional><br>
-                
-
-                
-
-                
-                </td>
-            
-
-            
-                <td class="default">
-                
-                    <code>'./_convertTemp'</code>
-                
-                </td>
-            
-
-            <td class="description last"><p>輸入臨時儲存圖片png檔之資料夾位置字串，預設'./_convertTemp'</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
                 <td class="name"><code>fdHtml</code></td>
             
 
@@ -783,47 +863,7 @@
                 </td>
             
 
-            <td class="description last"><p>輸入臨時儲存繪圖用html檔之資料夾位置字串，預設'./_convertTemp'</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>fdProfile</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type">String</span>
-
-
-
-            
-            </td>
-
-            
-                <td class="attributes">
-                
-                    &lt;optional><br>
-                
-
-                
-
-                
-                </td>
-            
-
-            
-                <td class="default">
-                
-                    <code>'./_convertTemp'</code>
-                
-                </td>
-            
-
-            <td class="description last"><p>輸入臨時儲存瀏覽器使用者資料之資料夾位置字串，預設'./_convertTemp'</p></td>
+            <td class="description last"><p>輸入臨時儲存繪圖用html檔之資料夾位置字串，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'</p></td>
         </tr>
 
     
@@ -955,7 +995,7 @@
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.3</a> on Sat Nov 15 2025 23:30:38 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Jul 21 2026 15:53:00 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
