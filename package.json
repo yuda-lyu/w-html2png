@@ -1,12 +1,12 @@
 {
   "name": "w-html2png",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "axios": "^1.18.1",
     "playwright-core": "^1.61.1",
-    "w-zip": "^1.0.28",
-    "wsemi": "^1.8.73"
+    "w-zip": "^1.0.29",
+    "wsemi": "^1.8.75"
   },
   "devDependencies": {
     "w-package-tools": "^1.1.12"
