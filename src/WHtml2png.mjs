@@ -20,13 +20,11 @@ import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
 import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
 import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import autoDownloadFiles from './autoDownloadFiles.mjs'
 
 
 //調用chrome免安裝版, 須至just-cool.net下載:
 //https://blog.just-cool.net/google-chrome-portable/
-
-
-let fdSrv = path.resolve()
 
 
 //timeIdle, alive模式閒置自動關閉常駐瀏覽器之時間(ms)
@@ -368,30 +366,8 @@ async function core(width, height, scale, html, opt, strategy) {
     }
     else {
 
-        //fdBase
-        let fdBaseSelf = `${fdSrv}/chrome/`
-        let fdBaseDist = `${fdSrv}/node_modules/w-html2png/chrome/`
-        let fdBase = fdBaseSelf
-        if (fsIsFolder(fdBaseDist)) {
-            fdBase = fdBaseDist
-        }
-        // console.log('fdBase', fdBase)
-
-        //fdExe
-        let fdExe = `${fdBase}portable/App/Chrome-bin/138.0.7204.97/`
-        // console.log('fdExe', fdExe)
-
-        //fpExe
-        let fpExe = `${fdExe}chrome.exe`
-        // console.log('fpExe', fpExe)
-
-        //check
-        if (!fsIsFile(fpExe)) {
-            //已使用npm i postinstall, 預期有fpExe可執行
-            throw new Error(`invalid fpExe[${fpExe}], need to run postinstall`)
-        }
-
-        //executablePath
+        //executablePath, 定位套件自帶之免安裝chrome, 若無檔案則自動下載, 取不到時autoDownloadFiles會reject錯誤訊息
+        let { fpExe } = await autoDownloadFiles()
         executablePath = fpExe
 
     }
@@ -794,6 +770,9 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * 'alive'為常駐瀏覽器, 第一次呼叫時啟動, 同行程後續呼叫重用故出圖較快, 閒置超過1小時自動關閉,
  * 批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出
  *
+ * 未指定opt.executablePath時使用套件自帶之免安裝chrome, 該chrome由安裝時(postinstall)自GitHub下載切割zip分片合併解壓而來,
+ * 位於套件chrome/目錄; 若因npm封鎖scripts致postinstall未執行, 則於首次調用時自動重新下載
+ *
  * @class
  * @param {Number} [width=700] 輸入圖片原始寬度數字，單位px，預設700
  * @param {Number} [height=400] 輸入圖片原始高度數字，單位px，預設400
@@ -801,7 +780,7 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * @param {String} [html=''] 輸入HTML字串，預設''
  * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {String} [opt.mode='single'] 輸入瀏覽器使用模式字串，'single'代表每次呼叫啟閉瀏覽器，'alive'代表常駐瀏覽器供同行程重用，預設'single'
- * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等，未給則使用套件自帶之免安裝chrome；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔，欲切換須先呼叫WHtml2png.close()，預設''
+ * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等，未給則使用套件自帶之免安裝chrome(無檔案時自動下載)；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔，欲切換須先呼叫WHtml2png.close()，預設''
  * @param {Array} [opt.stylesHead=[]] 輸入引用css程式碼網址陣列，預設[]
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
  * @param {String|Array} [opt.execJsHead=''] 輸入插入head內執行js程式碼字串或陣列，預設''

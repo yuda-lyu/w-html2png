@@ -5,19 +5,17 @@ import downloadFiles from '../src/downloadFiles.mjs'
 
 async function init() {
 
-    //check, 被安裝條件才執行
+    //check
     let __dirname = path.dirname(fileURLToPath(import.meta.url))
     if (!__dirname.includes('node_modules')) {
         return //非位於node_modules, 代表套件本身
     }
 
-    //fdSrv
+    //fdSrv, postinstall時cwd=套件自身在node_modules內的目錄
     let fdSrv = path.resolve()
 
-    //fdBase,
-    // let fdBase = `${fdSrv}/node_modules/w-html2png/chrome/`
-    let fdBase = `${fdSrv}/chrome/` //npm i後觸發安裝時, 工作路徑是位於套件w-html2png內
-    // console.log('fdBase', fdBase)
+    //fdBase, npm i後觸發安裝時, 工作路徑是位於套件/專案內
+    let fdBase = `${fdSrv}/chrome/`
 
     //downloadFiles
     await downloadFiles(fdBase)
