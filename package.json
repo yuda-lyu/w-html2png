@@ -1,19 +1,19 @@
 {
   "name": "w-html2png",
-  "version": "1.0.46",
+  "version": "1.0.47",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "axios": "^1.18.1",
     "playwright-core": "^1.61.1",
-    "w-zip": "^1.0.37",
-    "wsemi": "^1.8.85"
+    "w-zip": "^1.0.38",
+    "wsemi": "^1.8.92"
   },
   "devDependencies": {
-    "w-package-tools": "^1.1.15"
+    "w-package-tools": "^1.1.16"
   },
   "scripts": {
     "postinstall": "node scripts/install.mjs",
-    "test": "mocha --parallel --timeout 60000",
+    "test": "mocha --parallel \"test/*.test.mjs\" --timeout 180000",
     "deploy": "gh-pages -d docs"
   },
   "repository": {
