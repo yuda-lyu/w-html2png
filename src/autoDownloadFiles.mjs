@@ -70,12 +70,11 @@ async function autoDownloadFiles() {
         //併發呼叫共用同一個下載Promise, 避免重複下載
         if (pmDownload === null) {
             pmDownload = downloadFiles(fdBaseDL)
-                .catch((err) => {
+                .finally(() => {
 
-                    //下載失敗歸零, 使下次呼叫可重試下載
+                    //下載結束(成敗皆然)歸零, 使下次呼叫重新依檔案是否存在判定; 若只於失敗時歸零, 下載成功後檔案被移除(重裝套件、防毒隔離)或程序切換工作路徑時, 會沿用已resolve之Promise而不再下載
                     pmDownload = null
 
-                    return Promise.reject(err)
                 })
         }
         await pmDownload
