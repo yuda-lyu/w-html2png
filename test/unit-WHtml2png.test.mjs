@@ -1,6 +1,29 @@
+import './tools/fetchBlock.mjs'
 import fs from 'fs'
+import path from 'path'
 import assert from 'assert'
 import WHtml2png from '../src/WHtml2png.mjs'
+import { decodePng, countNonWhite, diffCount } from './tools/png.mjs'
+
+
+//規則R9: 出圖以語意斷言(PNG、尺寸、非白像素)為主, 對既有基準圖以容差比對為補強(通道差>16之像素數不超過總像素0.1%), 不逐位元; 超容差時把出圖與基準圖落於./testPending/
+function assertPng(b64, b64Base, name) {
+    let img = decodePng(b64)
+    let base = decodePng(b64Base)
+    assert.strict.equal(`${img.width}x${img.height}`, `${base.width}x${base.height}`)
+    assert.ok(countNonWhite(img) > 1000, 'blank image')
+    let d = diffCount(img, base)
+    let limit = Math.ceil(img.width * img.height * 0.001)
+    if (d.diff > limit) {
+        let fd = path.resolve('./testPending')
+        fs.mkdirSync(fd, { recursive: true })
+        let ts = Date.now()
+        fs.writeFileSync(path.join(fd, `${name}-${ts}-capture.png`), Buffer.from(b64, 'base64'))
+        fs.writeFileSync(path.join(fd, `${name}-${ts}-baseline.png`), Buffer.from(b64Base, 'base64'))
+        fs.writeFileSync(path.join(fd, `${name}-${ts}-diff.txt`), `diff pixels ${d.diff} > limit ${limit}`)
+    }
+    assert.ok(d.diff <= limit, `diff pixels ${d.diff} > ${limit}`)
+}
 
 
 function isWindows() {
@@ -86,7 +109,13 @@ async function testb() {
 }
 
 
-describe(`WHtml2png`, function() {
+describe(`unit-WHtml2png`, function() {
+
+    before(function() {
+        if (!isWindows()) {
+            this.skip() //套件自帶之免安裝chrome只支援Windows
+        }
+    })
 
     after(async function() {
         //關閉常駐瀏覽器, 使測試結束後Node行程可立即退出
@@ -94,48 +123,18 @@ describe(`WHtml2png`, function() {
     })
 
     it(`should return (base64) when run testa `, async function() {
-        let rr = null
-        let rt = null
-        if (isWindows()) {
-            let t = await testa()
-            rr = t.ret
-            rt = t.ans
-        }
-        else {
-            rr = 1
-            rt = 1
-        }
-        assert.strict.deepStrictEqual(rr, rt)
+        let t = await testa()
+        assertPng(t.ret, t.ans, 'testa')
     })
 
     it(`should return (base64) when run testa with mode='alive' `, async function() {
-        let rr = null
-        let rt = null
-        if (isWindows()) {
-            let t = await testa({ mode: 'alive' })
-            rr = t.ret
-            rt = t.ans
-        }
-        else {
-            rr = 1
-            rt = 1
-        }
-        assert.strict.deepStrictEqual(rr, rt)
+        let t = await testa({ mode: 'alive' })
+        assertPng(t.ret, t.ans, 'testa-alive')
     })
 
     it(`should return (base64) when run testb `, async function() {
-        let rr = null
-        let rt = null
-        if (isWindows()) {
-            let t = await testb()
-            rr = t.ret
-            rt = t.ans
-        }
-        else {
-            rr = 1
-            rt = 1
-        }
-        assert.strict.deepStrictEqual(rr, rt)
+        let t = await testb()
+        assertPng(t.ret, t.ans, 'testb')
     })
 
 })

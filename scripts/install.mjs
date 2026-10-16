@@ -1,28 +1,34 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
-import downloadFiles from '../src/downloadFiles.mjs'
+import autoDownloadFiles from '../src/autoDownloadFiles.mjs'
 
 
 async function init() {
 
-    //check
-    let __dirname = path.dirname(fileURLToPath(import.meta.url))
-    if (!__dirname.includes('node_modules')) {
-        return //非位於node_modules, 代表套件本身
+    //check, 套件自帶之免安裝chrome只有Windows版, 其他作業系統不下載
+    if (process.platform !== 'win32') {
+        return
     }
 
-    //fdSrv, postinstall時cwd=套件自身在node_modules內的目錄
-    let fdSrv = path.resolve()
+    //check, 環境變數W_HTML2PNG_SKIP_DOWNLOAD為真則不下載(首次調用時才下載, 或由呼叫端給executablePath)
+    let skip = String(process.env.W_HTML2PNG_SKIP_DOWNLOAD || '').toLowerCase()
+    if (skip !== '' && skip !== '0' && skip !== 'false') {
+        return
+    }
 
-    //fdBase, npm i後觸發安裝時, 工作路徑是位於套件/專案內
-    let fdBase = `${fdSrv}/chrome/`
+    //check, 以路徑段判斷是否位於node_modules內, 非位於node_modules代表套件本身(開發用repo)
+    let fdScript = path.dirname(fileURLToPath(import.meta.url))
+    if (!fdScript.split(path.sep).includes('node_modules')) {
+        return
+    }
 
-    //downloadFiles
-    await downloadFiles(fdBase)
+    //autoDownloadFiles, 與執行期同一定位與下載(安裝於本套件根/chrome/<chrome版本>/, 與當前工作路徑無關)
+    await autoDownloadFiles()
 
 }
 init()
     .catch((err) => {
+        //安裝階段下載失敗不使npm安裝失敗, 首次調用時會再下載
         console.log(err)
     })
 

@@ -8,3 +8,5 @@ CLAUDE*.md
 AGENTS*.md
 .env
 tmp
+testPending
+test/_tmp

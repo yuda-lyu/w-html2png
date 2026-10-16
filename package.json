@@ -1,15 +1,15 @@
 {
   "name": "w-html2png",
-  "version": "1.0.53",
+  "version": "1.0.54",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
-    "axios": "^1.18.1",
+    "lodash": "^4.18.1",
     "playwright-core": "^1.61.1",
     "w-zip": "^1.0.46",
-    "wsemi": "^1.9.12"
+    "wsemi": "^1.9.16"
   },
   "devDependencies": {
-    "w-package-tools": "^1.1.16"
+    "w-package-tools": "^1.1.18"
   },
   "scripts": {
     "postinstall": "node scripts/install.mjs",

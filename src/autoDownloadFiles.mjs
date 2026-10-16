@@ -1,32 +1,191 @@
+import fs from 'fs'
 import path from 'path'
-import fsIsFile from 'wsemi/src/fsIsFile.mjs'
-import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import downloadFiles from './downloadFiles.mjs'
+import chromeManifest from './chromeManifest.mjs'
+import downloadFiles, { getInstallInfo, isInstalled, sweep } from './downloadFiles.mjs'
+import errToMsg from './errToMsg.mjs'
+import getFdPkg from './pkgRoot.mjs'
 
 
-//verChrome, 套件自帶免安裝chrome之版本資料夾名稱, 須與chrome/portable內實際版本一致
-let verChrome = '138.0.7204.97'
+//pmDownloads, 同行程同一模組實例之併發呼叫共用同一次下載(跨模組實例與跨行程由downloadFiles之鎖處理)
+let pmDownloads = {}
 
 
-//fpRel, chrome.exe相對於chrome資料夾之路徑
-let fpRel = `portable/App/Chrome-bin/${verChrome}/chrome.exe`
+//sweptRoots, 每行程首次定位成功時清掃一次
+let sweptRoots = {}
 
 
-//pmDownload, 下載中之Promise, 供併發呼叫共用同一次下載, 避免同時多次下載寫入同一批檔案
-let pmDownload = null
+//failCache, 下載失敗之短期負快取(預設60秒內直接回傳上次錯誤), 避免安裝持續失敗時每次呼叫都重新下載約200MB
+let failCache = {}
+
+
+//sweepOnce, 每行程對同一chrome根只清掃一次(只刪本套件自建且本機擁有者已死之項目)
+let sweepOnce = (fdChromeRoot) => {
+    if (fdChromeRoot && !sweptRoots[fdChromeRoot] && fs.existsSync(fdChromeRoot)) {
+        sweptRoots[fdChromeRoot] = true
+        sweep(fdChromeRoot, { includeLocks: true })
+    }
+}
+
+
+let isFile = (fp) => {
+    try {
+        return fs.statSync(fp).isFile()
+    }
+    catch (err) {
+        return false
+    }
+}
 
 
 /**
- * 自動定位chrome.exe，若無檔案則自動下載，回傳chrome.exe的絕對路徑
+ * 取得chrome之定位資訊(不下載)
  *
- * 依序偵測當前工作路徑的chrome/與node_modules/w-html2png/chrome/，皆無chrome.exe時，
- * 代表安裝時npm封鎖scripts致postinstall未執行，故自動調用downloadFiles重新下載
+ * @param {Object} [opt={}] 輸入設定物件
+ * @param {Object} [opt.manifest] 輸入下載清單, 預設為套件自帶之清單
+ * @param {String} [opt.fdChromeRoot=''] 輸入chrome根資料夾, 未給則依環境變數W_HTML2PNG_CHROME_DIR或本套件根/chrome
+ * @param {Boolean} [opt.legacy=true] 輸入是否唯讀查找舊版之安裝位置
+ * @returns {Object} 回傳物件, 含fdChromeRoot、fpExeMain、legacy(舊位置之執行檔路徑陣列)、err(錯誤訊息, 無則'')
+ */
+function getChromeLayout(opt = {}) {
+    let manifest = opt.manifest || chromeManifest
+    let verChrome = manifest.verChrome
+    let fpRelExe = path.join('portable', 'App', 'Chrome-bin', verChrome, 'chrome.exe')
+    let err = ''
+
+    //fdPkg
+    let fdPkg = getFdPkg()
+
+    //fdChromeRoot
+    let fdChromeRoot = opt.fdChromeRoot || ''
+    if (!fdChromeRoot) {
+        let env = process.env.W_HTML2PNG_CHROME_DIR
+        if (typeof env === 'string' && env !== '') {
+            if (path.isAbsolute(env)) {
+                fdChromeRoot = path.resolve(env)
+            }
+            else {
+                err = `env W_HTML2PNG_CHROME_DIR[${env}] must be an absolute path`
+            }
+        }
+        else if (fdPkg) {
+            fdChromeRoot = path.join(fdPkg, 'chrome')
+        }
+    }
+
+    //fpExeMain
+    let fpExeMain = fdChromeRoot ? getInstallInfo(fdChromeRoot, verChrome).fpExe : ''
+
+    //legacy, 舊版之安裝位置, 唯讀查找(只找已存在之執行檔, 永不寫入), deprecated, 下一主版移除; opt.legacy=false可關閉(供注入清單之測試)
+    let legacy = []
+    if (opt.legacy !== false) {
+        if (fdPkg) {
+            legacy.push(path.join(fdPkg, 'chrome', fpRelExe))
+        }
+        legacy.push(path.resolve('chrome', fpRelExe))
+        legacy.push(path.resolve('node_modules', 'w-html2png', 'chrome', fpRelExe))
+    }
+
+    return {
+        verChrome,
+        fdChromeRoot,
+        fpExeMain,
+        legacy,
+        err,
+    }
+}
+
+
+/**
+ * 定位chrome(必要時下載安裝)之核心, 供autoDownloadFiles與測試注入清單使用
  *
- * 供w-html2png自身與其他依賴w-html2png的套件調用，無須各自實作偵測與下載邏輯
+ * @param {Object} [opt={}] 輸入設定物件, 同getChromeLayout, 另可給downloadFiles之設定(connectTimeoutMs、idleTimeoutMs、retries、retryDelayMs、staleMs、heartbeatMs、pollMs、lockTimeoutMs、log)與failCooldownMs(下載失敗之負快取時間, 預設60000)
+ * @returns {Promise} 回傳Promise, resolve為{ fpExe }, reject為錯誤訊息字串
+ */
+async function ensureChrome(opt = {}) {
+    let manifest = opt.manifest || chromeManifest
+    let layout = getChromeLayout(opt)
+    let { verChrome, fdChromeRoot, fpExeMain, legacy } = layout
+
+    //check
+    if (layout.err) {
+        return Promise.reject(layout.err)
+    }
+
+    //main, 以完成標記判定
+    if (fdChromeRoot && isInstalled(fdChromeRoot, verChrome)) {
+        sweepOnce(fdChromeRoot)
+        return { fpExe: fpExeMain }
+    }
+
+    //legacy, 舊位置只看執行檔是否存在(舊安裝無完成標記)
+    for (let fp of legacy) {
+        if (isFile(fp)) {
+            sweepOnce(fdChromeRoot)
+            return { fpExe: fp }
+        }
+    }
+
+    //check
+    if (!fdChromeRoot) {
+        return Promise.reject('can not locate w-html2png package root to place chrome, please set env W_HTML2PNG_CHROME_DIR (absolute path) or give opt.executablePath')
+    }
+
+    //failCache
+    let key = `${fdChromeRoot}|${verChrome}`
+    let failCooldownMs = opt.failCooldownMs ?? 60 * 1000
+    let fc = failCache[key]
+    if (fc && Date.now() - fc.at < failCooldownMs) {
+        return Promise.reject(`${fc.msg} (cached failure, retry after ${Math.ceil((failCooldownMs - (Date.now() - fc.at)) / 1000)}s)`)
+    }
+
+    //download
+    if (!pmDownloads[key]) {
+        pmDownloads[key] = downloadFiles(fdChromeRoot, manifest, opt)
+            .finally(() => {
+                delete pmDownloads[key]
+            })
+    }
+    let errDl = null
+    await pmDownloads[key]
+        .catch((err) => {
+            errDl = err
+        })
+    if (errDl !== null) {
+
+        //下載失敗時若主位置已完整(他方已完成), 視為成功
+        if (isInstalled(fdChromeRoot, verChrome)) {
+            return { fpExe: fpExeMain }
+        }
+
+        let msg = `can not download chrome into [${fdChromeRoot}]: ${errToMsg(errDl)}; set env W_HTML2PNG_CHROME_DIR (absolute path) to a writable dedicated folder or give opt.executablePath`
+        failCache[key] = { msg, at: Date.now() }
+        return Promise.reject(msg)
+    }
+
+    //check
+    if (!isInstalled(fdChromeRoot, verChrome)) {
+        return Promise.reject(`can not find chrome.exe after download: ${fpExeMain}`)
+    }
+
+    return { fpExe: fpExeMain }
+}
+
+
+/**
+ * 自動定位chrome.exe，若無則自動下載安裝，回傳chrome.exe的絕對路徑
+ *
+ * 定位順序：
+ * 1. 環境變數W_HTML2PNG_CHROME_DIR(須為絕對路徑)或本套件根目錄之chrome/(與當前工作路徑無關)，主位置為<chrome根>/<chrome版本>/portable/，以安裝完成標記判定
+ * 2. 舊版之安裝位置(deprecated，下一主版移除，唯讀查找，只找已存在之chrome.exe)：本套件根/chrome/portable/、當前工作路徑/chrome/portable/、當前工作路徑/node_modules/w-html2png/chrome/portable/
+ * 3. 皆無則下載安裝至主位置：下載網址釘選於特定commit並核對各分片SHA-256；多行程同時首次使用時以鎖檔互斥、只下載一份；暫存只位於<chrome根>/.dl-*，永不寫入當前工作路徑
+ *
+ * 套件根目錄不可寫(例如唯讀容器)時，請設定環境變數W_HTML2PNG_CHROME_DIR為可寫之絕對路徑，或於WHtml2png給予opt.executablePath
+ *
+ * 只刪除本套件自建之項目(隔離夾、擁有者已死之殘留、帶擁有標記之殘缺安裝)；主位置已有同名但非本套件所建之資料夾時不刪除而reject；下載失敗後預設60秒內再呼叫直接回傳上次錯誤(避免反覆下載約200MB)
  *
  * 因免安裝chrome只能用於Windows作業系統，故調用前須自行檢核作業系統
  *
- * @returns {Promise} 回傳Promise，resolve回傳執行檔路徑物件，內含fpExe為chrome.exe的絕對路徑字串，reject回傳錯誤訊息
+ * @returns {Promise} 回傳Promise，resolve回傳執行檔路徑物件，內含fpExe為chrome.exe的絕對路徑字串，reject回傳錯誤訊息字串
  * @example
  * import autoDownloadFiles from 'w-html2png/src/autoDownloadFiles.mjs'
  *
@@ -36,7 +195,7 @@ let pmDownload = null
  *     let { fpExe } = await autoDownloadFiles()
  *
  *     console.log('fpExe', fpExe)
- *     // fpExe D:\xxx\node_modules\w-html2png\chrome\portable\App\Chrome-bin\138.0.7204.97\chrome.exe
+ *     // fpExe D:\xxx\node_modules\w-html2png\chrome\138.0.7204.97\portable\App\Chrome-bin\138.0.7204.97\chrome.exe
  * }
  * test()
  *     .catch((err) => {
@@ -45,59 +204,9 @@ let pmDownload = null
  *
  */
 async function autoDownloadFiles() {
-
-    //fdSrv, 於調用時取當前工作路徑
-    let fdSrv = path.resolve()
-
-    //fdBaseSelf, fdBaseNM, chrome可能所在資料夾(開發套件本身時於cwd的chrome/, 被安裝為相依套件時於node_modules/w-html2png/chrome/)
-    let fdBaseSelf = `${fdSrv}/chrome/`
-    let fdBaseNM = `${fdSrv}/node_modules/w-html2png/chrome/`
-
-    //fdBase
-    let fdBase = ''
-    if (fsIsFile(`${fdBaseSelf}${fpRel}`)) {
-        fdBase = fdBaseSelf
-    }
-    else if (fsIsFile(`${fdBaseNM}${fpRel}`)) {
-        fdBase = fdBaseNM
-    }
-    else {
-
-        //fdBaseDL, 下載落點, 有node_modules/w-html2png/代表為被安裝之相依套件, 否則為套件自身
-        let fdBaseDL = fsIsFolder(`${fdSrv}/node_modules/w-html2png/`) ? fdBaseNM : fdBaseSelf
-
-        //downloadFiles, 無chrome.exe代表安裝時npm封鎖scripts致postinstall未執行, 故於此重新執行下載,
-        //併發呼叫共用同一個下載Promise, 避免重複下載
-        if (pmDownload === null) {
-            pmDownload = downloadFiles(fdBaseDL)
-                .finally(() => {
-
-                    //下載結束(成敗皆然)歸零, 使下次呼叫重新依檔案是否存在判定; 若只於失敗時歸零, 下載成功後檔案被移除(重裝套件、防毒隔離)或程序切換工作路徑時, 會沿用已resolve之Promise而不再下載
-                    pmDownload = null
-
-                })
-        }
-        await pmDownload
-
-        //check
-        if (fsIsFile(`${fdBaseDL}${fpRel}`)) {
-            fdBase = fdBaseDL
-        }
-
-    }
-
-    //check
-    if (fdBase === '') {
-        return Promise.reject('can not find chrome.exe')
-    }
-
-    //fpExe
-    let fpExe = path.resolve(fdBase, fpRel)
-
-    return {
-        fpExe,
-    }
+    return ensureChrome()
 }
 
 
+export { getChromeLayout, ensureChrome }
 export default autoDownloadFiles

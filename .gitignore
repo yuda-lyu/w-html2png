@@ -8,5 +8,8 @@ tmp
 .opencode
 .claude
 chrome/portable
+chrome/*/
+chrome/.*
 _convertTemp
+testPending
 

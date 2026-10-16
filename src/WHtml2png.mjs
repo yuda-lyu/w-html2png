@@ -16,10 +16,9 @@ import cint from 'wsemi/src/cint.mjs'
 import genID from 'wsemi/src/genID.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import delay from 'wsemi/src/delay.mjs'
-import fsIsFile from 'wsemi/src/fsIsFile.mjs'
-import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
-import fsDeleteFile from 'wsemi/src/fsDeleteFile.mjs'
+import buildHtml from './buildHtml.mjs'
+import errToMsg from './errToMsg.mjs'
+import routeLibs from './libRoutes.mjs'
 import autoDownloadFiles from './autoDownloadFiles.mjs'
 
 
@@ -32,14 +31,27 @@ let timeIdle = 60 * 60 * 1000 //1hr
 
 
 //常駐瀏覽器狀態(模組層單例), 供alive模式使用
-let browserPm = null //chromium.launch之Promise, 非null代表可用或啟動中(await即可取得), null代表下次呼叫須重新啟動
-let ctxPms = {} //以deviceScaleFactor為key之context Promise快取
+//gen為現行世代{ id, pmBrowser, ctxPms }: pmBrowser為chromium.launch之Promise, ctxPms為以deviceScaleFactor為key之context Promise快取; null代表下次呼叫須啟動新世代
+let gen = null
+let genSeq = 0
+let closeEpoch = 0 //每次WHtml2png.close()遞增, 其前開始之呼叫不再重試重啟瀏覽器
 let refCount = 0 //繪圖中之呼叫數
 let timerIdle = null //閒置計時器
 
 
 function isWindows() {
     return process.platform === 'win32'
+}
+
+
+//isFile, 判斷是否為檔案(跟隨符號連結)
+let isFile = (fp) => {
+    try {
+        return fs.statSync(fp).isFile()
+    }
+    catch (err) {
+        return false
+    }
 }
 
 
@@ -75,20 +87,45 @@ let getLaunchOpt = (executablePath, modeHeadless) => {
 }
 
 
-//getBrowser, 取得常駐瀏覽器, 未啟動時lazy啟動, 併發呼叫共用同一個launch Promise
-let getBrowser = (executablePath, modeHeadless) => {
+//newContext, 建立context並攔截模板之函式庫網址改由本機供應, 失敗時關閉已建立之context
+let newContext = async (browser, scale) => {
+    let context = await browser.newContext({
+        viewport: {
+            width: 1280,
+            height: 720,
+        },
+        deviceScaleFactor: scale,
+    })
+    try {
+        await routeLibs(context)
+    }
+    catch (err) {
+        await context.close()
+            .catch(() => {})
+        throw err
+    }
+    return context
+}
 
-    if (browserPm === null) {
 
-        //launch, 同步指派browserPm, 同一tick後之併發呼叫直接await同一個Promise, 不會重複launch
-        let pmSelf = chromium.launch(getLaunchOpt(executablePath, modeHeadless))
+//getGen, 取得現行世代, 無則lazy啟動; 併發呼叫共用同一個launch Promise
+let getGen = (executablePath, modeHeadless) => {
+
+    if (gen === null) {
+
+        //g, 同步指派gen, 同一tick後之併發呼叫直接取得同一世代, 不會重複launch
+        let g = {
+            id: ++genSeq,
+            pmBrowser: null,
+            ctxPms: {},
+        }
+        g.pmBrowser = chromium.launch(getLaunchOpt(executablePath, modeHeadless))
             .then((browser) => {
 
-                //disconnected, 瀏覽器意外死亡時歸零, 使下次呼叫重新啟動; 僅在browserPm仍指向本瀏覽器時歸零, 避免蓋掉他處新啟動之瀏覽器
+                //disconnected, 瀏覽器意外死亡時, 若仍為現行世代則歸零, 使下次呼叫重新啟動
                 browser.on('disconnected', () => {
-                    if (browserPm === pmSelf) {
-                        browserPm = null
-                        ctxPms = {}
+                    if (gen === g) {
+                        gen = null
                     }
                 })
 
@@ -96,75 +133,82 @@ let getBrowser = (executablePath, modeHeadless) => {
             })
             .catch((err) => {
 
-                //啟動失敗歸零, 使下次呼叫可重試啟動
-                if (browserPm === pmSelf) {
-                    browserPm = null
-                    ctxPms = {}
+                //啟動失敗, 若仍為現行世代則歸零, 使下次呼叫可重試啟動
+                if (gen === g) {
+                    gen = null
                 }
 
                 return Promise.reject(err)
             })
-        browserPm = pmSelf
+        gen = g
 
     }
 
-    return browserPm
+    return gen
 }
 
 
-//getContext, 取得指定deviceScaleFactor之常駐context, playwright之deviceScaleFactor為context層級故依scale分快取
+//closeGen, 關閉指定世代; 若其為現行世代先歸零, 使後續呼叫直接啟動新世代, 不會取得關閉中之瀏覽器
+let closeGen = async (g) => {
+    if (!g) {
+        return
+    }
+    if (gen === g) {
+        gen = null
+    }
+    await g.pmBrowser
+        .then((browser) => {
+            return browser.close()
+        })
+        .catch(() => {})
+}
+
+
+//getContext, 取得指定deviceScaleFactor之常駐context, playwright之deviceScaleFactor為context層級故依scale分快取; 快取綁定世代, 等待啟動期間世代已被關閉則拋錯
 let getContext = async (executablePath, modeHeadless, scale) => {
 
+    //g
+    let g = getGen(executablePath, modeHeadless)
+
     //browser
-    let browser = await getBrowser(executablePath, modeHeadless)
+    let browser = await g.pmBrowser
+    if (gen !== g) {
+        throw new Error('resident browser has been closed')
+    }
 
     //key
     let key = `dsf-${scale}`
 
     //newContext
-    if (ctxPms[key] === undefined) {
-        let pmCtx = browser.newContext({
-            viewport: {
-                width: 1280,
-                height: 720,
-            },
-            deviceScaleFactor: scale,
-        })
+    if (g.ctxPms[key] === undefined) {
+        let pmCtx = newContext(browser, scale)
             .catch((err) => {
 
                 //建立失敗清除快取, 使下次呼叫可重試建立
-                if (ctxPms[key] === pmCtx) {
-                    delete ctxPms[key]
+                if (g.ctxPms[key] === pmCtx) {
+                    delete g.ctxPms[key]
                 }
 
                 return Promise.reject(err)
             })
-        ctxPms[key] = pmCtx
+        g.ctxPms[key] = pmCtx
     }
 
-    return ctxPms[key]
-}
-
-
-//closeBrowser, 關閉常駐瀏覽器; 先歸零再關閉, 使後續呼叫直接啟動新瀏覽器, 不會取得關閉中之瀏覽器
-let closeBrowser = async () => {
-
-    //pmOld
-    let pmOld = browserPm
-
-    //歸零
-    browserPm = null
-    ctxPms = {}
-
-    //close
-    if (pmOld !== null) {
-        await pmOld
-            .then((browser) => {
-                return browser.close()
-            })
-            .catch(() => {})
+    let context = null
+    try {
+        context = await g.ctxPms[key]
+    }
+    catch (err) {
+        //瀏覽器已啟動但無法建立context, 屬瀏覽器層錯誤, 附上世代供重試前關閉本世代
+        let e = new Error(errToMsg(err))
+        e.whGen = g
+        throw e
     }
 
+    return {
+        context,
+        g,
+    }
 }
 
 
@@ -176,38 +220,53 @@ let scheduleIdleClose = () => {
     timerIdle = null
 
     //check, 無瀏覽器則無須排程
-    if (browserPm === null) {
+    if (gen === null) {
         return
     }
 
     //setTimeout
     timerIdle = setTimeout(() => {
         timerIdle = null
-        if (refCount === 0 && browserPm !== null) {
-            closeBrowser()
+        if (refCount === 0 && gen !== null) {
+            closeGen(gen)
         }
     }, timeIdle)
 
 }
 
 
-//aliveStrategy, 常駐模式: 使用模組層常駐瀏覽器與context, 出圖後不釋放, 失敗重試前重啟瀏覽器自癒
+//aliveStrategy, 常駐模式: 使用模組層常駐瀏覽器與context, 出圖後不釋放; 只有瀏覽器層錯誤才於重試前關閉本呼叫所用之世代
 let aliveStrategy = {
+    begin: () => {
+        return {
+            epoch: closeEpoch,
+        }
+    },
+    isAborted: (st) => {
+        return st.epoch !== closeEpoch
+    },
     acquire: async ({ executablePath, modeHeadless, scale }) => {
-        let context = await getContext(executablePath, modeHeadless, scale)
+        let { context, g } = await getContext(executablePath, modeHeadless, scale)
         return {
             context,
             release: null, //常駐不釋放, 瀏覽器交由閒置計時器或WHtml2png.close()關閉
+            token: g,
         }
     },
-    heal: async () => {
-        await closeBrowser()
+    heal: async (token) => {
+        await closeGen(token)
     },
 }
 
 
 //singleStrategy, 單次模式: 每次啟動新瀏覽器, 出圖後即關閉釋放
 let singleStrategy = {
+    begin: () => {
+        return {}
+    },
+    isAborted: () => {
+        return false
+    },
     acquire: async ({ executablePath, modeHeadless, scale }) => {
 
         //browser
@@ -216,13 +275,7 @@ let singleStrategy = {
         //context
         let context = null
         try {
-            context = await browser.newContext({
-                viewport: {
-                    width: 1280,
-                    height: 720,
-                },
-                deviceScaleFactor: scale,
-            })
+            context = await newContext(browser, scale)
         }
         catch (err) {
             //建立context失敗須關閉已啟動之瀏覽器避免洩漏
@@ -236,18 +289,28 @@ let singleStrategy = {
             release: async () => {
                 await browser.close()
             },
+            token: null,
         }
     },
     heal: async () => {},
 }
 
 
-//core, alive與single共用之出圖流程: 驗證輸入, 組合html, 依strategy取得context, 開page載入渲染截圖, 失敗重試, 回傳base64
+//core, alive與single共用之出圖流程: 驗證輸入, 組合html, 依strategy取得context, 開page載入渲染截圖, 失敗重試, 回傳base64; reject一律為錯誤訊息字串
 async function core(width, height, scale, html, opt, strategy) {
 
-    //isWindows
-    if (!isWindows()) {
-        return Promise.reject('operating system is not windows')
+    //st, 本次呼叫開始時之狀態(alive用於判斷其後是否被WHtml2png.close())
+    let st = strategy.begin()
+
+    //executablePath, 可由外部指定瀏覽器執行檔(如本機安裝Chrome或playwright託管chromium), 未指定則使用套件自帶之免安裝chrome
+    let executablePath = get(opt, 'executablePath')
+    if (!isestr(executablePath)) {
+        executablePath = ''
+    }
+
+    //isWindows, 套件自帶之免安裝chrome只有Windows版, 故未指定executablePath時須為Windows
+    if (!isWindows() && executablePath === '') {
+        return Promise.reject('operating system is not windows, the bundled portable chrome supports windows only, please give opt.executablePath')
     }
 
     //width
@@ -281,7 +344,6 @@ async function core(width, height, scale, html, opt, strategy) {
     if (!isestr(html)) {
         return Promise.reject('html is not an effective string')
     }
-    let cHtml = html
 
     //modeHeadless
     let modeHeadless = get(opt, 'modeHeadless')
@@ -296,25 +358,11 @@ async function core(width, height, scale, html, opt, strategy) {
         stylesHead = []
     }
 
-    //cStylesHead
-    let cStylesHead = ''
-    each(stylesHead, (v) => {
-        let c = `<link href="${v}" rel="stylesheet" />`
-        cStylesHead += c
-    })
-
     //scriptsHead
     let scriptsHead = get(opt, 'scriptsHead')
     if (!isearr(scriptsHead)) {
         scriptsHead = []
     }
-
-    //cScriptsHead
-    let cScriptsHead = ''
-    each(scriptsHead, (v) => {
-        let c = `<script src="${v}"></script>\n`
-        cScriptsHead += c
-    })
 
     //execJsHead
     let execJsHead = get(opt, 'execJsHead')
@@ -325,13 +373,6 @@ async function core(width, height, scale, html, opt, strategy) {
         execJsHead = []
     }
 
-    //cExecJsHead
-    let cExecJsHead = ''
-    each(execJsHead, (v) => {
-        let c = `<script>${v}</script>\n\n`
-        cExecJsHead += c
-    })
-
     //execJsPost
     let execJsPost = get(opt, 'execJsPost')
     if (isestr(execJsPost)) {
@@ -341,38 +382,41 @@ async function core(width, height, scale, html, opt, strategy) {
         execJsPost = []
     }
 
-    //cExecJsPost
-    let cExecJsPost = ''
-    each(execJsPost, (v) => {
-        let c = `<script>${v}</script>\n\n`
-        cExecJsPost += c
-    })
-
     //funGetUrl
     let funGetUrl = get(opt, 'funGetUrl')
 
     //funPageWait
     let funPageWait = get(opt, 'funPageWait')
 
-    //executablePath, 可由外部指定瀏覽器執行檔(如本機安裝Chrome或playwright託管chromium), 未指定則使用套件自帶之免安裝chrome
-    let executablePath = get(opt, 'executablePath')
-    if (isestr(executablePath)) {
+    //rejectOnPageError, 頁面端未捕捉之例外(pageerror)是否視為失敗
+    let rejectOnPageError = get(opt, 'rejectOnPageError') === true
+
+    //executablePath
+    if (executablePath !== '') {
 
         //check
-        if (!fsIsFile(executablePath)) {
-            throw new Error(`invalid opt.executablePath[${executablePath}]`)
+        if (!isFile(executablePath)) {
+            return Promise.reject(`invalid opt.executablePath[${executablePath}]`)
         }
 
     }
     else {
 
-        //executablePath, 定位套件自帶之免安裝chrome, 若無檔案則自動下載, 取不到時autoDownloadFiles會reject錯誤訊息
-        let { fpExe } = await autoDownloadFiles()
-        executablePath = fpExe
+        //autoDownloadFiles, 定位套件自帶之免安裝chrome, 若無則自動下載安裝, 取不到時reject錯誤訊息
+        let r = await autoDownloadFiles()
+            .then((res) => {
+                return { res }
+            }, (err) => {
+                return { err }
+            })
+        if (r.err !== undefined) {
+            return Promise.reject(errToMsg(r.err))
+        }
+        executablePath = r.res.fpExe
 
     }
 
-    //retry
+    //retry, 總嘗試次數(含第一次)
     let retry = get(opt, 'retry')
     if (!ispint(retry)) {
         retry = 3
@@ -397,16 +441,35 @@ async function core(width, height, scale, html, opt, strategy) {
         fdErr = './_convertTemp'
     }
 
+    //g, 組合頁面html(單次掃描模板, 內容逐字填入)
+    let g = buildHtml({
+        html,
+        stylesHead,
+        scriptsHead,
+        execJsHead,
+        execJsPost,
+    })
+
     //idpm
     let idpm = `${now2strp()}-${genID(6)}`
 
     //iCore
     let iCore = 0
 
-    //exec, 增加計數器, 執行coreDraw, 檢測非預期問題
+    //writeErrFile, 寫錯誤檔, 失敗回傳錯誤訊息(不拋錯, 不覆蓋原錯誤)
+    let writeErrFile = (fn, c) => {
+        try {
+            fs.mkdirSync(fdErr, { recursive: true })
+            fs.writeFileSync(path.resolve(fdErr, fn), c, 'utf8')
+            return ''
+        }
+        catch (err) {
+            return errToMsg(err)
+        }
+    }
+
+    //exec, 執行一次出圖, 回傳結果物件{ state, message, b64, needHeal, token }, 不拋錯
     let exec = async() => {
-        let errTemp = null
-        let b64 = ''
 
         //iCore
         iCore++
@@ -414,74 +477,36 @@ async function core(width, height, scale, html, opt, strategy) {
         //id
         let id = `${idpm}-${iCore}`
 
-        //coreDraw
-        let coreDraw = async () => {
-            let earrs = []
+        let earrs = []
+        let b64 = ''
+        let fpHtml = null
+        let needHeal = false
+        let token = null
 
-            //html
-            let g = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>highcharts to png</title>
+        try {
 
-  {cStylesHead}
+            //check, 本呼叫開始後已被WHtml2png.close()則不再啟動瀏覽器
+            if (strategy.isAborted(st)) {
+                earrs.push({
+                    anchor: 'WHtml2png.close()',
+                    err: 'aborted by WHtml2png.close()',
+                })
+            }
 
-  <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
-
-  <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.js"></script>
-  <script>
-      let w = wsemi
-  </script>
-
-  {cScriptsHead}
-
-  {cExecJsHead}
-
-</head>
-<body style="padding:0; margin:0;">
-
-    <div id="pl">
-        {cHtml}
-    </div>
-
-    {cExecJsPost}
-
-</body>
-</html>
-`
-
-            //html與style先取代, 避免取代到引入程式碼
-            g = g.replace('{cHtml}', cHtml)
-
-            //引入程式碼
-            g = g.replace('{cStylesHead}', cStylesHead)
-            g = g.replace('{cScriptsHead}', cScriptsHead)
-            g = g.replace('{cExecJsHead}', cExecJsHead)
-            g = g.replace('{cExecJsPost}', cExecJsPost)
-
-            //fpHtml與url, 僅funGetUrl場景需寫html暫存檔, 否則直接以setContent灌入html字串
-            let fpHtml = null
+            //url, 僅funGetUrl場景需寫html暫存檔, 否則直接以setContent灌入html字串
             let url = null
-            if (isfun(funGetUrl)) {
-
-                //fsCreateFolder
-                if (!fsIsFolder(fdHtml)) {
-                    fsCreateFolder(fdHtml)
-                }
-
-                //fpHtml
-                fpHtml = path.resolve(fdHtml, `whweb_${id}.html`)
-                // console.log('fpHtml', fpHtml)
+            if (size(earrs) === 0 && isfun(funGetUrl)) {
 
                 //writeFileSync
                 try {
-                    fs.writeFileSync(fpHtml, g, 'utf8')
+                    fs.mkdirSync(fdHtml, { recursive: true })
+                    let fp = path.resolve(fdHtml, `whweb_${id}.html`)
+                    fs.writeFileSync(fp, g, { encoding: 'utf8', flag: 'wx' }) //排他建立, 不覆寫既有檔案
+                    fpHtml = fp
                 }
                 catch (err) {
                     earrs.push({
-                        anchor: `fs.writeFileSync(fpHtml, g, 'utf8')`,
+                        anchor: 'write html file for funGetUrl',
                         err,
                     })
                 }
@@ -504,25 +529,35 @@ async function core(width, height, scale, html, opt, strategy) {
 
             }
 
-            //b64
-            let b64 = ''
-
             //page流程
             if (size(earrs) === 0) {
 
-                //acquire, 依strategy取得context與釋放函數
+                //acquire, 依strategy取得context與釋放函數; 等待funGetUrl期間若已被WHtml2png.close()則不再啟動瀏覽器
                 let context = null
                 let release = null
-                try {
-                    let ac = await strategy.acquire({ executablePath, modeHeadless, scale })
-                    context = ac.context
-                    release = ac.release
-                }
-                catch (err) {
+                if (strategy.isAborted(st)) {
                     earrs.push({
-                        anchor: 'strategy.acquire',
-                        err,
+                        anchor: 'WHtml2png.close()',
+                        err: 'aborted by WHtml2png.close()',
                     })
+                }
+                else {
+                    try {
+                        let ac = await strategy.acquire({ executablePath, modeHeadless, scale })
+                        context = ac.context
+                        release = ac.release
+                        token = ac.token
+                    }
+                    catch (err) {
+                        if (err && err.whGen) {
+                            needHeal = true
+                            token = err.whGen
+                        }
+                        earrs.push({
+                            anchor: 'strategy.acquire',
+                            err,
+                        })
+                    }
                 }
 
                 //page
@@ -533,6 +568,7 @@ async function core(width, height, scale, html, opt, strategy) {
                         page.setDefaultNavigationTimeout(60 * 1000) //延長timeout
                     }
                     catch (err) {
+                        needHeal = true //無法開頁屬瀏覽器層錯誤
                         earrs.push({
                             anchor: 'context.newPage()',
                             err,
@@ -542,6 +578,15 @@ async function core(width, height, scale, html, opt, strategy) {
 
                 //draw
                 if (page !== null) {
+
+                    //pageerror, 須於載入前掛上
+                    let pageErrors = []
+                    if (rejectOnPageError) {
+                        page.on('pageerror', (e) => {
+                            pageErrors.push(errToMsg(e))
+                        })
+                    }
+
                     try {
 
                         //setViewportSize, deviceScaleFactor已由context給定
@@ -569,6 +614,13 @@ async function core(width, height, scale, html, opt, strategy) {
                             await page.waitForFunction(funPageWait, null, { polling: 200, timeout: 60 * 1000 }) //200ms偵測一次, 延長timeout
                         }
 
+                        //check pageerror, 截圖前有頁面端例外則視為失敗
+                        if (rejectOnPageError && pageErrors.length > 0) {
+                            let e = new Error(`page error: ${pageErrors.join(' | ')}`)
+                            e.isPageError = true
+                            throw e
+                        }
+
                         //screenshot, 直接取Buffer, 不落地png暫存檔
                         let buf = await page.screenshot({
                             timeout: 60 * 1000, //延長timeout
@@ -579,11 +631,18 @@ async function core(width, height, scale, html, opt, strategy) {
 
                     }
                     catch (err) {
-                        //try catch也能攔截async函數
                         earrs.push({
                             anchor: 'fun(page)',
                             err,
                         })
+
+                        //載入/等待/截圖失敗時一併附上已收到之頁面端錯誤(原因保留)
+                        if (rejectOnPageError && pageErrors.length > 0 && !(err && err.isPageError)) {
+                            earrs.push({
+                                anchor: 'pageerror',
+                                err: `page error: ${pageErrors.join(' | ')}`,
+                            })
+                        }
                     }
 
                     //close
@@ -596,6 +655,15 @@ async function core(width, height, scale, html, opt, strategy) {
                             err,
                         })
                     }
+
+                    //check, 瀏覽器已斷線屬瀏覽器層錯誤
+                    try {
+                        if (!context.browser().isConnected()) {
+                            needHeal = true
+                        }
+                    }
+                    catch (err) {}
+
                 }
 
                 //release, single模式關閉本次啟動之瀏覽器, alive模式為null不釋放
@@ -613,129 +681,112 @@ async function core(width, height, scale, html, opt, strategy) {
 
             }
 
-            //delete
-            if (fpHtml !== null && fsIsFile(fpHtml)) {
-                try {
+        }
+        catch (err) {
+            earrs.push({
+                anchor: 'exec',
+                err,
+            })
+        }
+
+        //delete fpHtml
+        if (fpHtml !== null) {
+            try {
+                if (isFile(fpHtml)) {
                     fs.unlinkSync(fpHtml)
                 }
-                catch (err) {}
             }
-
-            //check
-            if (size(earrs) > 0) {
-
-                //cearrs
-                let cearrs = ''
-                each(earrs, (earr) => {
-                    let m = get(earr, 'err.message', '')
-                    let c = `${m} in ${earr.anchor}`
-                    cearrs += c + '\n'
-                })
-
-                //writeFileSync
+            catch (err) {
                 if (writeError) {
-                    if (!fsIsFolder(fdErr)) {
-                        fsCreateFolder(fdErr)
-                    }
-                    let fpJson = path.resolve(fdErr, `err_${id}_all.json`)
-                    // console.log('fpJson', fpJson)
-                    fs.writeFileSync(fpJson, cearrs, 'utf8')
+                    writeErrFile(`err_${id}_fpHtml.json`, `can not delete html[whweb_${id}.html]: ${errToMsg(err)}`)
                 }
-
-                return Promise.reject(cearrs)
             }
-
-            //check
-            if (!isestr(b64)) {
-                return Promise.reject(`b64 is not an effective string`)
-            }
-
-            return b64
-        }
-
-        //coreDraw
-        await coreDraw()
-            .then((res) => {
-                b64 = res
-            })
-            .catch((err) => {
-                errTemp = err
-            })
-            .finally(() => {
-
-                //fpHtml, 防禦性清除, 預期coreDraw內已刪除
-                let fpHtml = path.resolve(fdHtml, `whweb_${id}.html`)
-                if (fsIsFile(fpHtml)) {
-                    fsDeleteFile(fpHtml)
-                }
-                if (fsIsFile(fpHtml) && writeError) {
-                    if (!fsIsFolder(fdErr)) {
-                        fsCreateFolder(fdErr)
-                    }
-                    let fpJson = path.resolve(fdErr, `err_${id}_fpHtml.json`)
-                    fs.writeFileSync(fpJson, `can not delete html[whweb_${id}.html}]`, 'utf8')
-                }
-
-            })
-
-        //state
-        let state = errTemp === null ? 'success' : 'error'
-
-        //r
-        let r = {
-            state,
-            message: errTemp,
-            b64,
-        }
-
-        return r
-    }
-
-    //proc, 失敗時重試
-    let proc = async() => {
-        let errTemp = null
-        let b64 = ''
-
-        while (true) {
-
-            //exec
-            let r = await exec()
-                .catch(() => {
-                    //已全攔截, 預期不會有catch
-                })
-
-            //check, r.state='success'
-            if (get(r, 'state', '') === 'success') {
-                //儲存b64並跳出
-                b64 = r.b64
-                break
-            }
-
-            //check, 來到此處必為r.state='error'
-            if (iCore >= retry) {
-                //若retry=3, 執行3次都失敗時iCore=3, 則視為不再重試, 儲存錯誤並跳出
-                errTemp = r.message //使用最後執行之錯誤訊息回傳
-                break
-            }
-
-            //自癒, 失敗重試前依strategy處置, 常駐模式重啟瀏覽器使重試取得全新瀏覽器
-            await strategy.heal()
-
-            //延遲再重試
-            await delay(5000)
-
         }
 
         //check
-        if (errTemp !== null) {
-            return Promise.reject(errTemp)
+        if (size(earrs) > 0) {
+
+            //cearrs
+            let cearrs = ''
+            each(earrs, (earr) => {
+                cearrs += `${errToMsg(earr.err)} in ${earr.anchor}\n`
+            })
+
+            //writeErrFile, 寫檔失敗時附記於訊息, 不覆蓋原錯誤
+            if (writeError) {
+                let e = writeErrFile(`err_${id}_all.json`, cearrs)
+                if (e !== '') {
+                    cearrs += `can not write error file: ${e}\n`
+                }
+            }
+
+            return {
+                state: 'error',
+                message: cearrs,
+                needHeal,
+                token,
+            }
         }
 
-        return b64
+        //check
+        if (!isestr(b64)) {
+            return {
+                state: 'error',
+                message: 'b64 is not an effective string',
+                needHeal,
+                token,
+            }
+        }
+
+        return {
+            state: 'success',
+            b64,
+        }
     }
 
-    //proc
-    let b64 = await proc()
+    //proc, 失敗時重試
+    let errTemp = null
+    let b64 = ''
+    while (true) {
+
+        //exec
+        let r = await exec()
+            .catch((err) => {
+                //exec已全攔截, 預期不會來到此處, 仍保守轉為錯誤結果
+                return {
+                    state: 'error',
+                    message: errToMsg(err),
+                    needHeal: false,
+                    token: null,
+                }
+            })
+
+        //check, r.state='success'
+        if (r.state === 'success') {
+            b64 = r.b64
+            break
+        }
+
+        //check, 若retry=3, 執行3次都失敗時iCore=3, 則不再重試; 本呼叫開始後已被WHtml2png.close()亦不再重試
+        if (iCore >= retry || strategy.isAborted(st)) {
+            errTemp = r.message
+            break
+        }
+
+        //自癒, 只有瀏覽器層錯誤才關閉本呼叫所用之世代(alive), 其他並發呼叫之瀏覽器不受頁面層錯誤影響
+        if (r.needHeal) {
+            await strategy.heal(r.token)
+        }
+
+        //延遲再重試
+        await delay(5000)
+
+    }
+
+    //check
+    if (errTemp !== null) {
+        return Promise.reject(errToMsg(errTemp))
+    }
 
     return b64
 }
@@ -768,30 +819,41 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * 提供兩種瀏覽器使用模式(opt.mode):
  * 'single'為每次呼叫啟動新瀏覽器, 出圖後即關閉釋放, Node行程可自然結束, 適合排程批次;
  * 'alive'為常駐瀏覽器, 第一次呼叫時啟動, 同行程後續呼叫重用故出圖較快, 閒置超過1小時自動關閉,
- * 批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出
+ * 批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出(close前已開始之呼叫不再重試重啟瀏覽器);
+ * 只有瀏覽器層錯誤(無法開頁、瀏覽器斷線)才於重試前重啟常駐瀏覽器, 頁面層錯誤不影響同時進行之其他呼叫
  *
- * 未指定opt.executablePath時使用套件自帶之免安裝chrome, 該chrome由安裝時(postinstall)自GitHub下載切割zip分片合併解壓而來,
- * 位於套件chrome/目錄; 若因npm封鎖scripts致postinstall未執行, 則於首次調用時自動重新下載
+ * 未指定opt.executablePath時使用套件自帶之免安裝chrome(只支援Windows), 定位與下載規則見autoDownloadFiles:
+ * 位於本套件根目錄之chrome/<chrome版本>/portable/(與當前工作路徑無關, 定位與安裝chrome永不寫入當前工作路徑; 僅opt.fdHtml/opt.fdErr之預設為當前工作路徑下之./_convertTemp), 可由環境變數W_HTML2PNG_CHROME_DIR(絕對路徑)改放他處;
+ * 舊版之位置(本套件根/chrome/portable/、當前工作路徑/chrome/portable/、當前工作路徑/node_modules/w-html2png/chrome/portable/)仍會唯讀查找(deprecated, 下一主版移除);
+ * 皆無則於首次調用時自動下載安裝(約200MB, 多行程同時首次使用時只下載一份); 安裝時npm(12起)預設封鎖postinstall, 故首次調用下載為常態
+ *
+ * 頁面模板預先載入lodash(全域_)與wsemi(全域w), 皆由本套件相依之本機檔案供應(不需網路), 可於execJsHead、execJsPost使用
+ *
+ * 內容皆逐字插入頁面(含$&、$'、$$等字樣): html置於div#pl內; execJsHead與execJsPost以inline之script插入, 內容不得含字面</script>(需要時寫成<\/script>);
+ * stylesHead與scriptsHead之網址置於屬性內, 不得含雙引號;
+ * 未給opt.funGetUrl時以setContent載入(about:blank), html內之本機檔案(file://)與相對路徑資源不會載入, 請改用data url或給opt.funGetUrl
  *
  * @class
  * @param {Number} [width=700] 輸入圖片原始寬度數字，單位px，預設700
  * @param {Number} [height=400] 輸入圖片原始高度數字，單位px，預設400
  * @param {Number} [scale=3] 輸入欲將圖片放大比例數字，單位px，預設3
- * @param {String} [html=''] 輸入HTML字串，預設''
+ * @param {String} html 輸入HTML字串，須為有效字串
  * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {String} [opt.mode='single'] 輸入瀏覽器使用模式字串，'single'代表每次呼叫啟閉瀏覽器，'alive'代表常駐瀏覽器供同行程重用，預設'single'
- * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等，未給則使用套件自帶之免安裝chrome(無檔案時自動下載)；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔，欲切換須先呼叫WHtml2png.close()，預設''
+ * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等(給予時不限作業系統)，未給則使用套件自帶之免安裝chrome(只支援Windows，無檔案時自動下載)；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔與modeHeadless，欲切換須先呼叫WHtml2png.close()，預設''
+ * @param {Boolean|String} [opt.modeHeadless='new'] 輸入是否無頭，false代表顯示UI，其餘視為無頭，預設'new'
  * @param {Array} [opt.stylesHead=[]] 輸入引用css程式碼網址陣列，預設[]
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
  * @param {String|Array} [opt.execJsHead=''] 輸入插入head內執行js程式碼字串或陣列，預設''
  * @param {String|Array} [opt.execJsPost=''] 輸入於dom末插入執行js程式碼字串或陣列，預設''
  * @param {Function} [opt.funGetUrl=null] 輸入轉換goto所使用本機網址(fpHtml)成為url之函數，預設null
- * @param {Function} [opt.funPageWait=null] 輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，預設null
- * @param {Integer} [opt.retry=3] 輸入失敗重試次數整數，預設3
+ * @param {Function} [opt.funPageWait=null] 輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，逾時60秒，預設null
+ * @param {Boolean} [opt.rejectOnPageError=false] 輸入頁面端發生未捕捉之例外(含未處理之Promise rejection)時是否視為失敗(依retry重試後reject，訊息含頁面錯誤)，預設false(維持出圖)
+ * @param {Integer} [opt.retry=3] 輸入總嘗試次數整數(含第一次)，每次失敗後等待5秒再試，預設3
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
- * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'
- * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串，預設'./_convertTemp'
- * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息
+ * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串(相對於當前工作路徑)，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'
+ * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串(相對於當前工作路徑)，預設'./_convertTemp'
+ * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串
  * @example
  *
  * async function testa() {
@@ -845,16 +907,23 @@ async function WHtml2png(width = 700, height = 400, scale = 3, html = '', opt = 
     //dispatch
     if (mode === 'alive') {
         return coreAlive(width, height, scale, html, opt)
+            .catch((err) => {
+                return Promise.reject(errToMsg(err))
+            })
     }
     return coreSingle(width, height, scale, html, opt)
+        .catch((err) => {
+            return Promise.reject(errToMsg(err))
+        })
 }
 
 
-//close, 主動關閉alive模式之常駐瀏覽器並清除閒置計時器, 供批次腳本結束前呼叫使Node行程可立即退出
+//close, 主動關閉alive模式之常駐瀏覽器並清除閒置計時器, 供批次腳本結束前呼叫使Node行程可立即退出; close前已開始之呼叫不再重試重啟瀏覽器
 WHtml2png.close = async () => {
+    closeEpoch++
     clearTimeout(timerIdle)
     timerIdle = null
-    await closeBrowser()
+    await closeGen(gen)
 }
 
 
