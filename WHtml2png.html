@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="WHtml2png.html">WHtml2png</a></li></ul><h3>Global</h3><ul><li><a href="global.html#autoDownloadFiles">autoDownloadFiles</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="WHtml2png.html">WHtml2png</a></li></ul><h3>Global</h3><ul><li><a href="global.html#acquireLock">acquireLock</a></li><li><a href="global.html#autoDownloadFiles">autoDownloadFiles</a></li><li><a href="global.html#buildHtml">buildHtml</a></li><li><a href="global.html#downloadFiles">downloadFiles</a></li><li><a href="global.html#ensureChrome">ensureChrome</a></li><li><a href="global.html#getChromeLayout">getChromeLayout</a></li><li><a href="global.html#getFdPkg">getFdPkg</a></li><li><a href="global.html#routeLibs">routeLibs</a></li></ul>
     
 </nav>
 
@@ -64,7 +64,7 @@
 
     
 
-    <h4 class="name" id="WHtml2png"><span class="type-signature type-signature-async">(async) </span>new WHtml2png<span class="signature">(width<span class="signature-attributes">opt</span>, height<span class="signature-attributes">opt</span>, scale<span class="signature-attributes">opt</span>, html<span class="signature-attributes">opt</span>, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="WHtml2png"><span class="type-signature type-signature-async">(async) </span>new WHtml2png<span class="signature">(width<span class="signature-attributes">opt</span>, height<span class="signature-attributes">opt</span>, scale<span class="signature-attributes">opt</span>, html, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -78,15 +78,22 @@
 <p>提供兩種瀏覽器使用模式(opt.mode):
 'single'為每次呼叫啟動新瀏覽器, 出圖後即關閉釋放, Node行程可自然結束, 適合排程批次;
 'alive'為常駐瀏覽器, 第一次呼叫時啟動, 同行程後續呼叫重用故出圖較快, 閒置超過1小時自動關閉,
-批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出</p>
-<p>未指定opt.executablePath時使用套件自帶之免安裝chrome, 該chrome由安裝時(postinstall)自GitHub下載切割zip分片合併解壓而來,
-位於套件chrome/目錄; 若因npm封鎖scripts致postinstall未執行, 則於首次調用時自動重新下載</p></li></ul></dd>
+批次腳本結束前可呼叫WHtml2png.close()主動關閉常駐瀏覽器, 使Node行程可立即退出(close前已開始之呼叫不再重試重啟瀏覽器);
+只有瀏覽器層錯誤(無法開頁、瀏覽器斷線)才於重試前重啟常駐瀏覽器, 頁面層錯誤不影響同時進行之其他呼叫</p>
+<p>未指定opt.executablePath時使用套件自帶之免安裝chrome(只支援Windows), 定位與下載規則見autoDownloadFiles:
+位於本套件根目錄之chrome/&lt;chrome版本&gt;/portable/(與當前工作路徑無關, 定位與安裝chrome永不寫入當前工作路徑; 僅opt.fdHtml/opt.fdErr之預設為當前工作路徑下之./_convertTemp), 可由環境變數W_HTML2PNG_CHROME_DIR(絕對路徑)改放他處;
+舊版之位置(本套件根/chrome/portable/、當前工作路徑/chrome/portable/、當前工作路徑/node_modules/w-html2png/chrome/portable/)仍會唯讀查找(deprecated, 下一主版移除);
+皆無則於首次調用時自動下載安裝(約200MB, 多行程同時首次使用時只下載一份); 安裝時npm(12起)預設封鎖postinstall, 故首次調用下載為常態</p>
+<p>頁面模板預先載入lodash(全域_)與wsemi(全域w), 皆由本套件相依之本機檔案供應(不需網路), 可於execJsHead、execJsPost使用</p>
+<p>內容皆逐字插入頁面(含$&amp;、$'、$$等字樣): html置於div#pl內; execJsHead與execJsPost以inline之script插入, 內容不得含字面</script>(需要時寫成&lt;/script&gt;);
+stylesHead與scriptsHead之網址置於屬性內, 不得含雙引號;
+未給opt.funGetUrl時以setContent載入(about:blank), html內之本機檔案(file://)與相對路徑資源不會載入, 請改用data url或給opt.funGetUrl</p></li></ul></dd>
     
 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line836">line 836</a>
+        <a href="WHtml2png.mjs.html">WHtml2png.mjs</a>, <a href="WHtml2png.mjs.html#line898">line 898</a>
     </li></ul></dd>
     
 
@@ -339,8 +346,6 @@ testa()
             
                 <td class="attributes">
                 
-                    &lt;optional><br>
-                
 
                 
 
@@ -351,12 +356,10 @@ testa()
             
                 <td class="default">
                 
-                    <code>''</code>
-                
                 </td>
             
 
-            <td class="description last"><p>輸入HTML字串，預設''</p></td>
+            <td class="description last"><p>輸入HTML字串，須為有效字串</p></td>
         </tr>
 
     
@@ -499,7 +502,50 @@ testa()
                 </td>
             
 
-            <td class="description last"><p>輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等，未給則使用套件自帶之免安裝chrome(無檔案時自動下載)；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔，欲切換須先呼叫WHtml2png.close()，預設''</p></td>
+            <td class="description last"><p>輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等(給予時不限作業系統)，未給則使用套件自帶之免安裝chrome(只支援Windows，無檔案時自動下載)；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔與modeHeadless，欲切換須先呼叫WHtml2png.close()，預設''</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>modeHeadless</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Boolean</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'new'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入是否無頭，false代表顯示UI，其餘視為無頭，預設'new'</p></td>
         </tr>
 
     
@@ -745,7 +791,47 @@ testa()
                 </td>
             
 
-            <td class="description last"><p>輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，預設null</p></td>
+            <td class="description last"><p>輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，逾時60秒，預設null</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rejectOnPageError</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Boolean</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>false</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入頁面端發生未捕捉之例外(含未處理之Promise rejection)時是否視為失敗(依retry重試後reject，訊息含頁面錯誤)，預設false(維持出圖)</p></td>
         </tr>
 
     
@@ -785,7 +871,7 @@ testa()
                 </td>
             
 
-            <td class="description last"><p>輸入失敗重試次數整數，預設3</p></td>
+            <td class="description last"><p>輸入總嘗試次數整數(含第一次)，每次失敗後等待5秒再試，預設3</p></td>
         </tr>
 
     
@@ -865,7 +951,7 @@ testa()
                 </td>
             
 
-            <td class="description last"><p>輸入臨時儲存繪圖用html檔之資料夾位置字串，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'</p></td>
+            <td class="description last"><p>輸入臨時儲存繪圖用html檔之資料夾位置字串(相對於當前工作路徑)，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'</p></td>
         </tr>
 
     
@@ -905,7 +991,7 @@ testa()
                 </td>
             
 
-            <td class="description last"><p>輸入臨時儲存錯誤檔之資料夾位置字串，預設'./_convertTemp'</p></td>
+            <td class="description last"><p>輸入臨時儲存錯誤檔之資料夾位置字串(相對於當前工作路徑)，預設'./_convertTemp'</p></td>
         </tr>
 
     
@@ -938,7 +1024,7 @@ testa()
 
         
 <div class="param-desc">
-    <p>回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息</p>
+    <p>回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串</p>
 </div>
 
 
@@ -997,7 +1083,7 @@ testa()
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Oct 11 2026 14:48:26 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Oct 16 2026 13:33:51 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

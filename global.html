@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="WHtml2png.html">WHtml2png</a></li></ul><h3>Global</h3><ul><li><a href="global.html#autoDownloadFiles">autoDownloadFiles</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="WHtml2png.html">WHtml2png</a></li></ul><h3>Global</h3><ul><li><a href="global.html#acquireLock">acquireLock</a></li><li><a href="global.html#autoDownloadFiles">autoDownloadFiles</a></li><li><a href="global.html#buildHtml">buildHtml</a></li><li><a href="global.html#downloadFiles">downloadFiles</a></li><li><a href="global.html#ensureChrome">ensureChrome</a></li><li><a href="global.html#getChromeLayout">getChromeLayout</a></li><li><a href="global.html#getFdPkg">getFdPkg</a></li><li><a href="global.html#routeLibs">routeLibs</a></li></ul>
     
 </nav>
 
@@ -130,6 +130,454 @@
 
     
 
+    <h4 class="name" id="acquireLock"><span class="type-signature type-signature-async">(async) </span>acquireLock<span class="signature">(fpLock, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>取得跨行程鎖(內部使用)</p>
+<p>以'wx'建立鎖檔(內容pid、本機識別、token), 持有期間定時更新mtime; 等待者輪詢: done()為真即回傳null(他方已完成)
+過期判定: 本機識別相同且持有者PID已死, 或鎖檔之身分(dev/ino/size/mtime)於本機觀察連續staleMs未變(與兩機時鐘差無關)
+接手: 只接手一般檔案(合法內容, 或為空/無法解析之鎖), 以改名取得並比對改名前後身分, 非同一物件則盡量歸還且不刪除; 資料夾等其他項目一律不動, 等到逾時
+未取得鎖之每一輪皆檢查逾時並等待pollMs(不會同步空轉)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="fileLock.mjs.html">fileLock.mjs</a>, <a href="fileLock.mjs.html#line84">line 84</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>fpLock</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入鎖檔路徑字串</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件</p>
+                <h6>Properties</h6>
+                
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>done</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">function</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>null</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入是否已完成之函數, 回傳true則不需取得鎖</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>staleMs</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>60000</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入鎖連續多久未更新視為過期(ms)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>heartbeatMs</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>5000</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入持有期間更新mtime之間隔(ms)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>pollMs</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>300</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入等待時之輪詢間隔(ms)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>timeoutMs</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>3600000</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入等待逾時(ms)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+            </td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳Promise, resolve為釋放鎖之函數(另帶touch方法可手動更新mtime), 或null代表done()已為真; 逾時reject Error(訊息含持有者資訊)</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
     <h4 class="name" id="autoDownloadFiles"><span class="type-signature type-signature-async">(async) </span>autoDownloadFiles<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
@@ -140,17 +588,22 @@
 <dl class="details">
     
     <dt class="tag-description">Description:</dt>
-    <dd class="tag-description"><ul class="dummy"><li><p>自動定位chrome.exe，若無檔案則自動下載，回傳chrome.exe的絕對路徑</p>
-<p>依序偵測當前工作路徑的chrome/與node_modules/w-html2png/chrome/，皆無chrome.exe時，
-代表安裝時npm封鎖scripts致postinstall未執行，故自動調用downloadFiles重新下載</p>
-<p>供w-html2png自身與其他依賴w-html2png的套件調用，無須各自實作偵測與下載邏輯</p>
+    <dd class="tag-description"><ul class="dummy"><li><p>自動定位chrome.exe，若無則自動下載安裝，回傳chrome.exe的絕對路徑</p>
+<p>定位順序：</p>
+<ol>
+<li>環境變數W_HTML2PNG_CHROME_DIR(須為絕對路徑)或本套件根目錄之chrome/(與當前工作路徑無關)，主位置為&lt;chrome根&gt;/&lt;chrome版本&gt;/portable/，以安裝完成標記判定</li>
+<li>舊版之安裝位置(deprecated，下一主版移除，唯讀查找，只找已存在之chrome.exe)：本套件根/chrome/portable/、當前工作路徑/chrome/portable/、當前工作路徑/node_modules/w-html2png/chrome/portable/</li>
+<li>皆無則下載安裝至主位置：下載網址釘選於特定commit並核對各分片SHA-256；多行程同時首次使用時以鎖檔互斥、只下載一份；暫存只位於&lt;chrome根&gt;/.dl-*，永不寫入當前工作路徑</li>
+</ol>
+<p>套件根目錄不可寫(例如唯讀容器)時，請設定環境變數W_HTML2PNG_CHROME_DIR為可寫之絕對路徑，或於WHtml2png給予opt.executablePath</p>
+<p>只刪除本套件自建之項目(隔離夾、擁有者已死之殘留、帶擁有標記之殘缺安裝)；主位置已有同名但非本套件所建之資料夾時不刪除而reject；下載失敗後預設60秒內再呼叫直接回傳上次錯誤(避免反覆下載約200MB)</p>
 <p>因免安裝chrome只能用於Windows作業系統，故調用前須自行檢核作業系統</p></li></ul></dd>
     
 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="autoDownloadFiles.mjs.html">autoDownloadFiles.mjs</a>, <a href="autoDownloadFiles.mjs.html#line47">line 47</a>
+        <a href="autoDownloadFiles.mjs.html">autoDownloadFiles.mjs</a>, <a href="autoDownloadFiles.mjs.html#line206">line 206</a>
     </li></ul></dd>
     
 
@@ -205,7 +658,7 @@ async function test() {
     let { fpExe } = await autoDownloadFiles()
 
     console.log('fpExe', fpExe)
-    // fpExe D:\xxx\node_modules\w-html2png\chrome\portable\App\Chrome-bin\138.0.7204.97\chrome.exe
+    // fpExe D:\xxx\node_modules\w-html2png\chrome\138.0.7204.97\portable\App\Chrome-bin\138.0.7204.97\chrome.exe
 }
 test()
     .catch((err) => {
@@ -233,7 +686,1441 @@ test()
 
         
 <div class="param-desc">
-    <p>回傳Promise，resolve回傳執行檔路徑物件，內含fpExe為chrome.exe的絕對路徑字串，reject回傳錯誤訊息</p>
+    <p>回傳Promise，resolve回傳執行檔路徑物件，內含fpExe為chrome.exe的絕對路徑字串，reject回傳錯誤訊息字串</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="buildHtml"><span class="type-signature"></span>buildHtml<span class="signature">(opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {String}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>組合繪圖頁面之html</p>
+<p>模板只掃描一次，替換值以函式回傳，故內容中之<code>$&amp;</code>、<code>$'</code>、<code>$`</code>、<code>$$</code>不會被當成特殊樣式，已填入之內容亦不會再被掃描(內容含<code>{cExecJsPost}</code>等字樣時逐字保留)</p>
+<p>限制：execJsHead與execJsPost以inline之script插入，內容不得含字面<code>&lt;/script&gt;</code>(或<code>&lt;!--</code>接<code>&lt;script</code>)；stylesHead與scriptsHead之網址置於屬性內，不得含<code>&quot;</code></p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="buildHtml.mjs.html">buildHtml.mjs</a>, <a href="buildHtml.mjs.html#line54">line 54</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件</p>
+                <h6>Properties</h6>
+                
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>html</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>''</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入html字串，置於div#pl內</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>stylesHead</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入css網址陣列</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>scriptsHead</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入js網址陣列</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>execJsHead</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入插入head內執行之js程式碼陣列</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>execJsPost</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>[]</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入於dom末插入執行之js程式碼陣列</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+            </td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳html字串</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">String</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="downloadFiles"><span class="type-signature type-signature-async">(async) </span>downloadFiles<span class="signature">(fdChromeRoot, manifest, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>下載並安裝套件自帶之免安裝chrome至<fdChromeRoot>/<verChrome>/portable(內部使用)</p>
+<p>跨行程以鎖檔互斥; 各行程於自己建立之隔離夾下載、核對大小與SHA-256、合併、解壓, 驗證後寫入擁有標記與完成標記, 再以改名原子安裝
+只刪除本套件自建之項目: 隔離夾(確由本次建立者)、擁有者已死之殘留、帶擁有標記之殘缺安裝; 主位置已存在而非本套件所建者不刪除並reject</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="downloadFiles.mjs.html">downloadFiles.mjs</a>, <a href="downloadFiles.mjs.html#line260">line 260</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>fdChromeRoot</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入chrome根資料夾(絕對路徑)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>manifest</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入下載清單, 含verChrome、urlBase、shards(fn、size、sha256)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件(connectTimeoutMs、idleTimeoutMs、retries、retryDelayMs、staleMs、heartbeatMs、pollMs、lockTimeoutMs、log)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳Promise, resolve為無, reject為Error</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="ensureChrome"><span class="type-signature type-signature-async">(async) </span>ensureChrome<span class="signature">(opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>定位chrome(必要時下載安裝)之核心, 供autoDownloadFiles與測試注入清單使用</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="autoDownloadFiles.mjs.html">autoDownloadFiles.mjs</a>, <a href="autoDownloadFiles.mjs.html#line104">line 104</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件, 同getChromeLayout, 另可給downloadFiles之設定(connectTimeoutMs、idleTimeoutMs、retries、retryDelayMs、staleMs、heartbeatMs、pollMs、lockTimeoutMs、log)與failCooldownMs(下載失敗之負快取時間, 預設60000)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳Promise, resolve為{ fpExe }, reject為錯誤訊息字串</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getChromeLayout"><span class="type-signature"></span>getChromeLayout<span class="signature">(opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>取得chrome之定位資訊(不下載)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="autoDownloadFiles.mjs.html">autoDownloadFiles.mjs</a>, <a href="autoDownloadFiles.mjs.html#line49">line 49</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入設定物件</p>
+                <h6>Properties</h6>
+                
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>manifest</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入下載清單, 預設為套件自帶之清單</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>fdChromeRoot</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>''</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入chrome根資料夾, 未給則依環境變數W_HTML2PNG_CHROME_DIR或本套件根/chrome</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>legacy</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Boolean</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>true</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入是否唯讀查找舊版之安裝位置</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+            </td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳物件, 含fdChromeRoot、fpExeMain、legacy(舊位置之執行檔路徑陣列)、err(錯誤訊息, 無則'')</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getFdPkg"><span class="type-signature"></span>getFdPkg<span class="signature">()</span><span class="type-signature"> &rarr; {String}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>取得本套件根目錄(內部使用)</p>
+<p>先以模組位置推導(src/與dist/皆位於根下一層)並以package.json之name驗證, 被打包進他套件時改以套件名解析, 皆不可得回傳''
+注意: 不得於頂層宣告__filename/__dirname(rollup umd墊片自我參照TDZ), import.meta只用url</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="pkgRoot.mjs.html">pkgRoot.mjs</a>, <a href="pkgRoot.mjs.html#line27">line 27</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳本套件根目錄之絕對路徑, 不可得為''</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">String</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="routeLibs"><span class="type-signature type-signature-async">(async) </span>routeLibs<span class="signature">(context)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>於context攔截模板之函式庫網址, 改由本機檔案供應(離線可用、版本固定為已安裝之相依); 本機檔案不可得者維持自CDN載入</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="libRoutes.mjs.html">libRoutes.mjs</a>, <a href="libRoutes.mjs.html#line65">line 65</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>context</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入playwright之BrowserContext</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳Promise</p>
 </div>
 
 
@@ -275,7 +2162,7 @@ test()
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Oct 11 2026 14:48:26 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Oct 16 2026 13:33:51 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
