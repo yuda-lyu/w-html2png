@@ -1,12 +1,12 @@
 {
   "name": "w-html2png",
-  "version": "1.0.55",
+  "version": "1.0.56",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "lodash": "^4.18.1",
     "playwright-core": "^1.61.1",
-    "w-zip": "^1.0.47",
-    "wsemi": "^1.9.21"
+    "w-zip": "^1.0.49",
+    "wsemi": "^1.9.25"
   },
   "devDependencies": {
     "w-package-tools": "^1.1.21"
