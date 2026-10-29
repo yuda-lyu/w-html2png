@@ -5,6 +5,7 @@ import assert from 'assert'
 import { pathToFileURL } from 'url'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { decodePng, countNonWhite } from './tools/png.mjs'
+import { setBinEnv } from './tools/binEnv.mjs'
 
 
 //規則R7: opt.rejectOnPageError=true時, 頁面端未捕捉之例外(同步、語法錯、非同步、未處理之rejection)使該次失敗並reject字串(含頁面錯誤); 預設false維持出圖
@@ -22,14 +23,20 @@ let cases = [
 
 describe('unit-pageError', function() {
 
-    before(function() {
+    let restoreBin = null
+
+    before(async function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
+        restoreBin = await setBinEnv('pageErrorMirror') //套件自帶之chrome由本機鏡像經ensureBins取得, 不連外網
     })
 
     after(async function() {
         await WHtml2png.close()
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     it('control: no page error renders with rejectOnPageError=true', async function() {

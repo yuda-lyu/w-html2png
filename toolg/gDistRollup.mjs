@@ -7,7 +7,7 @@ let fdSrc = fileURLToPath(new URL('../src', import.meta.url))
 let fdTar = fileURLToPath(new URL('../dist', import.meta.url))
 
 
-//globals, 外部模組: Node內建模組與playwright-core(本套件為Node專用, runin為nodejs)
+//globals, 外部模組: Node內建模組與playwright-core(本套件為Node專用, runin為nodejs); child_process為wsemi之fsEnsureBins解壓所用
 let globals = {
     'fs': 'fs',
     'path': 'path',
@@ -17,6 +17,7 @@ let globals = {
     'crypto': 'crypto',
     'stream': 'stream',
     'stream/promises': 'stream/promises',
+    'child_process': 'child_process',
     'events': 'events',
     'playwright-core': 'playwright-core',
 }

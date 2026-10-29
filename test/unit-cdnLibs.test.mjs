@@ -5,6 +5,7 @@ import fs from 'fs'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { resolveLibFile } from '../src/libRoutes.mjs'
 import { decodePng, classifyCenter } from './tools/png.mjs'
+import { setBinEnv, getChromeExe } from './tools/binEnv.mjs'
 
 
 //規則R11: 模板之lodash(_)與wsemi(w)由本套件相依之本機檔案供應, 頁內版本等於已安裝版本; w-hc2png之用法(_.isObject、_.set)可用
@@ -14,14 +15,20 @@ let paint = (cond) => `document.body.style.background = (${cond}) ? "rgb(0,255,0
 
 describe('unit-cdnLibs', function() {
 
-    before(function() {
+    let restoreBin = null
+
+    before(async function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
+        restoreBin = await setBinEnv('cdnLibsMirror') //套件自帶之chrome由本機鏡像經ensureBins取得, 不連外網
     })
 
     after(async function() {
         await WHtml2png.close()
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     //離線(context.setOffline)時模板之函式庫仍可用: 證明由本機供應而非CDN
@@ -29,8 +36,7 @@ describe('unit-cdnLibs', function() {
         let { chromium } = await import('playwright-core')
         let { default: routeLibs } = await import('../src/libRoutes.mjs')
         let { default: buildHtml } = await import('../src/buildHtml.mjs')
-        let { default: autoDownloadFiles } = await import('../src/autoDownloadFiles.mjs')
-        let { fpExe } = await autoDownloadFiles()
+        let fpExe = await getChromeExe()
         let browser = await chromium.launch({ executablePath: fpExe, headless: true, args: ['--no-sandbox', '--disable-gpu'] })
         try {
             let ctx = await browser.newContext()

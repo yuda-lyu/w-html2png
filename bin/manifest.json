@@ -1,0 +1,603 @@
+{
+  "schema": 1,
+  "pkg": "w-html2png",
+  "mode": "pinned",
+  "repo": "yuda-lyu/w-html2png",
+  "commit": "bf41fac5f3e4698e21f05388aea3ec4dfece93e7",
+  "bundles": [
+    {
+      "name": "chrome",
+      "archives": [
+        {
+          "parts": [
+            {
+              "path": "bin/chrome/portable.zip.001",
+              "sha256": "f45e943a39cba5a1bc2dcef87d84642943b20c945d119537fd1d53798816abbf",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.002",
+              "sha256": "a6cf398c69518bc7371f47351915c33b64c947ef30f94865688794751b9cb32e",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.003",
+              "sha256": "dd751936d924df54fe4999b940d0e05ac46c83c043abcc28ad0e26e1c27356f3",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.004",
+              "sha256": "fc4f36d9a4a0d0fc4203f6b67adfcdd9f13ab746bf98839e135deabebcd7dba0",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.005",
+              "sha256": "3f6604cd84789b9e990dc43323c317c7890af2965018b0feaecaf3f51f567591",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.006",
+              "sha256": "4e8cdf6b76a71bf473f33e656e5611628e74f0aa194911ff4274861325f7037a",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.007",
+              "sha256": "3b3b4efaf2f896b44882954c6256cb404dacadec8ee28c1551767fa198d33a97",
+              "size": 26214400
+            },
+            {
+              "path": "bin/chrome/portable.zip.008",
+              "sha256": "cd5aa1dbd28fe098e5b077d66d96c1d35a6b9c75571c9d3380f7a11fc271e814",
+              "size": 14844997
+            }
+          ],
+          "assembled": {
+            "type": "zip",
+            "sha256": "08f357a8774cb7103af9e86877ae3834cd0850e7f352afca855c18408fb312e8",
+            "size": 198345797
+          },
+          "extract": {
+            "type": "zip",
+            "files": [
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/138.0.7204.97.manifest",
+                "sha256": "2efb08a288db21470e9a688e0db558077cd5faf14f53d34957a17cd8321edc5f",
+                "size": 226
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Extensions/external_extensions.json",
+                "sha256": "a68cafd7d78d5c671c2560656653f2a4d83ab66d87a8728356a88fb1f477b3e6",
+                "size": 99
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/First Run",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/IwaKeyDistribution/iwa-key-distribution.pb",
+                "sha256": "484e299ce81355b546f88ced4c65b1e84262c19b2cfc06999cf998c4369917d3",
+                "size": 241
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/IwaKeyDistribution/manifest.json",
+                "sha256": "383ee339b1eb8138b34c13a9be34364db4be5fc0cb6c5769a1cda0c3093d0934",
+                "size": 114
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/af.pak",
+                "sha256": "22f05384639ff79ec83be7cf43a131ed2de15dfe2ae85dbbf1d726b26ecdef7e",
+                "size": 516132
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/am.pak",
+                "sha256": "9d932c05a3d7fc30616453dadaeba09616917e58a17cb6f19992281f9c9e8dd5",
+                "size": 834582
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ar.pak",
+                "sha256": "e5d7c2ad5100f240e7e647db392ec47b7f09b581e2122715100769f00419a55c",
+                "size": 922429
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/bg.pak",
+                "sha256": "17bcb26907da32af0b185812d83eccaa92d457f9d46ad83b4de27666f0111c69",
+                "size": 951744
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/bn.pak",
+                "sha256": "029e975a4282ade20ae3bbd6d292ce375e79914046390c4ff4c6d5b2ef817829",
+                "size": 1217771
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ca.pak",
+                "sha256": "97baa0c007e253b5875d4923087ea6e2e496c6cd1ab1057d3c645cc47e44e4d4",
+                "size": 586471
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/cs.pak",
+                "sha256": "fd197ab7cb11951112f402ccada3ceabefd97df263aee5c6c7946451d3138b48",
+                "size": 593286
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/da.pak",
+                "sha256": "4e32e2eef0f2a8c8079c416d15f3034fcbceacadc0f30cc3e5a774b8717b0410",
+                "size": 544815
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/de.pak",
+                "sha256": "167661ce56ddf4294e25160e60d01ed2421bd87480b47a5b60e4ae4f8a06ba3e",
+                "size": 587912
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/el.pak",
+                "sha256": "7dfe900401ca3e1454b9b00bdcb88ee94a8c45819cce268fc272a9b1f1718b56",
+                "size": 1043782
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/en-GB.pak",
+                "sha256": "aa19086599b951a579b82d7623ceb184597bfd7a32809f3b36676fd1fe201d0d",
+                "size": 469989
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/en-US.pak",
+                "sha256": "c3c33f1b0f8c85429bcea66658847d82b63a714e70375aa5f1eb13102045d8a0",
+                "size": 474413
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/es-419.pak",
+                "sha256": "b66f663c954154811c4c0cb510da66975dbd4a875a3d0efeac1b4d2819846563",
+                "size": 572875
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/es.pak",
+                "sha256": "ba37fb3a7f27e39ddadcbdb4e9492d85a3b8b2d2aa04329711568ef12bc580d9",
+                "size": 570879
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/et.pak",
+                "sha256": "36f182078ee4c7b566d7c1db7094957e5dd15a7d5fec82f89ef2a6b735c1b931",
+                "size": 522597
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/fa.pak",
+                "sha256": "806bef61bbc6e2c917c4dff5876cd7dd66e7e0ed6c2773f9d4ad1b13a35901c3",
+                "size": 851151
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/fi.pak",
+                "sha256": "8f693cc38ca005e01e768b16c43c831ea22cf4485a0b8e2be62f0e7b1e3ff7fb",
+                "size": 530701
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/fil.pak",
+                "sha256": "b8edd12524198e490734e12bf7760c2e15aca8977197fb004700c3f37c2ed1fa",
+                "size": 601149
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/fr.pak",
+                "sha256": "863128fe753c523230cbaa924fad02b0c9b6ddedda1f69f93497e2ed773379d8",
+                "size": 620004
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/gu.pak",
+                "sha256": "b0af6d03d87b436c03fe0fe47e86e8e5606dfadec6b0609b02f821dbf24a6cdb",
+                "size": 1208935
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/he.pak",
+                "sha256": "a2f74251b5fc82a80056cc7a509d54797b0d7e1c6784384fe322c550be2adcf8",
+                "size": 750780
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/hi.pak",
+                "sha256": "a5d7cbe61828d65309d6e4dab6482d9046b069a72fd4a7b809254e5a3100458f",
+                "size": 1287937
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/hr.pak",
+                "sha256": "9c1d983d573fa5b798ae0320e338d0392be3e24f74f0cd70d399b9ed0a382491",
+                "size": 577231
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/hu.pak",
+                "sha256": "27de8ab503f19244fa3485a6c2a841bc989aa42794544994ef2dfd1334916332",
+                "size": 621424
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/id.pak",
+                "sha256": "4fb3d644d00705bbd1d2e67e448bca2f9f917a58e6e5456a92585112f4532b39",
+                "size": 513446
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/it.pak",
+                "sha256": "996db1bd31b121d1febd185d369e4594a11976daba2e211371f95ac5ae953513",
+                "size": 570068
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ja.pak",
+                "sha256": "1da7d74fa75462b2859a60ee20fc75beda89c8b9f04f59d04267ac50d60fcd00",
+                "size": 689267
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/kn.pak",
+                "sha256": "bfd555ab55ba4bec7cd7b0660f763169d6e072ab43e9f25415930ef034a15e48",
+                "size": 1371655
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ko.pak",
+                "sha256": "bd36771d7f28fb01e2b2f86d46d7c9509fdde606c1af4c4551c925da0afb7ea0",
+                "size": 581867
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/lt.pak",
+                "sha256": "c245e98c325afb40a7dfc1bee25f61af7bebd973ee148c21d1de87e05f0d6d50",
+                "size": 623909
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/lv.pak",
+                "sha256": "ce1382a1a9d0b95a38a13fabcb870f82171401b0d39057f70f1e802c24df6fdc",
+                "size": 623434
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ml.pak",
+                "sha256": "494d67528fe28c171640a59ae19128539aa5c6021817fc3f39f10ab8818d7237",
+                "size": 1427639
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/mr.pak",
+                "sha256": "f177a45750df2c1f284b734c68c99ecea1dc38a47f0589d0b9daaff8025c8f99",
+                "size": 1181110
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ms.pak",
+                "sha256": "c0f7f0172511ec382fa1cc054a9be7eab86e4bd9517cfb508560e6524a2f0d4b",
+                "size": 537770
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/nb.pak",
+                "sha256": "8c45b3ac5e1e3ea2fe1f9edea0e2bdde9035e743af29296ccee3f3f56b2d8056",
+                "size": 521288
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/nl.pak",
+                "sha256": "95f867308c95e1c20ce25766c9efce92b67128353442de5397aa416023d962b0",
+                "size": 540937
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/pl.pak",
+                "sha256": "ee459258c12c97c48e4379f5923155d39b4e124b537bd57926412282030564a5",
+                "size": 600999
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/pt-BR.pak",
+                "sha256": "4f66334739e69c8894478a4156d7c4e74d4d372378310653436fda5106be269f",
+                "size": 562014
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/pt-PT.pak",
+                "sha256": "364bb093a95dfca6453e6794669686768c1b9a198dbd1028e83a34de3c35aeb3",
+                "size": 567077
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ro.pak",
+                "sha256": "d5d254fa3e0f90b103e247917884c21225c6a819431fae4ab8663fc9b846c48d",
+                "size": 587248
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ru.pak",
+                "sha256": "86f3e0d37ec8ee8f4f643efd729186b6c152eb353334cc0dedc046069cbc9922",
+                "size": 963160
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/sk.pak",
+                "sha256": "5da6004717e324e565543392a15cdb709145f1e7bcda9fc1c18dfd43983610db",
+                "size": 604223
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/sl.pak",
+                "sha256": "5e64987d33e5bfefa1f0099b1663b22268d8f4506f8f283a13d334deb0c2b1d8",
+                "size": 581653
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/sr.pak",
+                "sha256": "e9c0a04cd026a9f52f38326ea6cfc498d522f32372efe1861af216e1177e6f23",
+                "size": 894467
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/sv.pak",
+                "sha256": "ca342b6f7e1cd94af1556c8a780331215b10c0f9b9533b10b0e197bcb7ed18ff",
+                "size": 524178
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/sw.pak",
+                "sha256": "2913f95097dcd625ea7756ccf3a34e70dd1798269a5490ae7b9d32426523051f",
+                "size": 552865
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ta.pak",
+                "sha256": "a5d06a780a1a30a0b0611dcfbe2e01e17f6fce06cea90c454776f5c3d8389d0d",
+                "size": 1422975
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/te.pak",
+                "sha256": "d2fd0e8e34595a19f8b4e205e8b954417d4b5445fe8e5e704f9e7703608d0201",
+                "size": 1312248
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/th.pak",
+                "sha256": "85954e471a34a8157d4cb7476a67537cead9f597466e03de5f760b574ef8dac4",
+                "size": 1104440
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/tr.pak",
+                "sha256": "1d26ac261ac43e1bb0b6fd62e79d946019ddafe813c1135d0526b562d8d4a11d",
+                "size": 562700
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/uk.pak",
+                "sha256": "c173620d4f75c2389bf4a6c58a93a35dbeb13341f3260e0cf8ef9985d7ece6c1",
+                "size": 965513
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/ur.pak",
+                "sha256": "8e27ce7f5a25856de3be27c4e0fb1faf62cf1f6894d9fca8e68c4c4da038b2b2",
+                "size": 841578
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/vi.pak",
+                "sha256": "417a217255cb68b5c3777b5dce79d70d8414305fa37f70ab5e925fa8fd12cff1",
+                "size": 670084
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/zh-CN.pak",
+                "sha256": "0cd33683b6af7cee3984115684724db716221a4a012433cc38bf26e8380b3087",
+                "size": 480635
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/Locales/zh-TW.pak",
+                "sha256": "fed1557988285640ec513bca93b83b65b5ec54c7160c4cdf02d885bc9c2ecff3",
+                "size": 476443
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/MEIPreload/manifest.json",
+                "sha256": "44844cf3dde6e80087ae0e6bf0d9326d7ef7d23326d24ac83af0850be26923d2",
+                "size": 238
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/MEIPreload/preloaded_data.pb",
+                "sha256": "c6070a157b4e28d16fbccbd233e93846ddb070c85e1a1bc64469b7a5f1424fad",
+                "size": 8254
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/PrivacySandboxAttestationsPreloaded/manifest.json",
+                "sha256": "046eef41180d8148734da0aeecd27f0001197d91d2cacacc0c1fa7231b11c6cd",
+                "size": 122
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/PrivacySandboxAttestationsPreloaded/privacy-sandbox-attestations.dat",
+                "sha256": "bfc9638f7d20e0b439a0e509867e1bd0bcb0e0d938072974804be96d54792cf7",
+                "size": 7670
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/Logo.png",
+                "sha256": "d5ff2f45dd0e5cdc6fbffd3f5fa9098676d46f8aafd74d6d52d298231d6dc394",
+                "size": 28131
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/LogoBeta.png",
+                "sha256": "d172d5ce446919158db1c30a2dc2e215112ae6ec0611ddc3df99476cacf0f16d",
+                "size": 24214
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/LogoCanary.png",
+                "sha256": "6f2f599bc3e34e11072ce7ddbab2d484371563f0bc79de785df075db5e17ae1b",
+                "size": 28016
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/LogoDev.png",
+                "sha256": "2761c60263a2919b856915bdd2a0604b7f0e56e59d893ab13cccef2b7c967229",
+                "size": 24504
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/SmallLogo.png",
+                "sha256": "01806a682799261596229b1ebf2fbd0a6f10dcbd60563dcceeb6dcd69ad0d125",
+                "size": 9938
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/SmallLogoBeta.png",
+                "sha256": "2b60ffe21dd44716907c407b99e4bd06a422fc37cdbbac8265bdd9dea2d5b735",
+                "size": 8859
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/SmallLogoCanary.png",
+                "sha256": "fd9d313ea50469528021c7942f5aaf94be24a55d56473ac3fb0ea4f98980b81f",
+                "size": 9741
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/VisualElements/SmallLogoDev.png",
+                "sha256": "e0276c75eecb709f1e8a764f869414863d07f246e9f0cb9edb3ccfd333982a71",
+                "size": 8959
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/WidevineCdm/LICENSE",
+                "sha256": "20de375707692099b3132084695377ce5fec0aec05813dedcce094b8eda44386",
+                "size": 473
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/WidevineCdm/_platform_specific/win_x64/widevinecdm.dll",
+                "sha256": "3ed0dec36754402707c2ae4fbfa887fe3089945f6f7c1a8a3e6c1e64ad1c2648",
+                "size": 19439200
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/WidevineCdm/_platform_specific/win_x64/widevinecdm.dll.sig",
+                "sha256": "bdae7b6c2de3587282809f2ee1b07db0b29769de2ce9aec06f4399685c7729b7",
+                "size": 1427
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/WidevineCdm/manifest.json",
+                "sha256": "ec3b2207713572eea996a74e25d076c4c70843fa51d1dcd5e7b69409957f9042",
+                "size": 938
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome.dll",
+                "sha256": "678b91eebd4da340eff6d306ac71ad889d300637f910e493356cc5ec1f7e6ea9",
+                "size": 253636192
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome.dll.sig",
+                "sha256": "8f74fcce6c19ee845fd0c12ae58c01016904fd75901c22980c3a4a4a31993ad4",
+                "size": 1427
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome.exe",
+                "sha256": "d9ae6af6e6d58a24992367595fde6524968fec8dd79bf9b2b63a76b10bf3a00b",
+                "size": 3196512
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome.exe.sig",
+                "sha256": "be7a6a21e9a8881283850460c1f8476f8e90f86e14492b1d82c0af74277f7a3d",
+                "size": 1427
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_100_percent.pak",
+                "sha256": "a302e1c197be0ad044c239da09c4025afe6d998403d082f2ca65a345be0cb238",
+                "size": 967163
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_200_percent.pak",
+                "sha256": "cb0183e82cbabd175bc052603a2c1df947ddd3c9d5539694bff21c4b4dfa8bf9",
+                "size": 1782807
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_elf.dll",
+                "sha256": "d8bc0ae2d8e2f9d84ee1ca8a82a51376d0b2941ca5da6ef6dec19bbaf11940c3",
+                "size": 1655904
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_proxy.exe",
+                "sha256": "02ac0386580c37cd3cc4e1e173f8bdccdfa5aa9cdace3628c13efa18c3e34206",
+                "size": 1466976
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_pwa_launcher.exe",
+                "sha256": "eef09c75076b8f7de70834b30c44b34a8bea912535b2e88d4f562968f377d15c",
+                "size": 1775200
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/chrome_wer.dll",
+                "sha256": "338c57d2a108c4d4195a3e736e84149fc0bc6c90bb12c6a0449d7ef632b952d4",
+                "size": 121440
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/d3dcompiler_47.dll",
+                "sha256": "289767b49dc8525bce262ea06fee4ef9fced2e131a55b25654ce871c1f0498b2",
+                "size": 4916728
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/default_apps/external_extensions.json",
+                "sha256": "579032cb7b7bea083e077ba85cb62dc231ba672f93ce1b55a379968fb3c2cee9",
+                "size": 291
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/dxcompiler.dll",
+                "sha256": "c5818274152f1a73f266c1da76a1d922cc7c4afffc56d34873b241363c32f4a1",
+                "size": 25853024
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/dxil.dll",
+                "sha256": "473f5e853120a5b6ca583ac51f453664abae15c0db1d307f29c8bf7a7b89f96c",
+                "size": 1502800
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/elevated_tracing_service.exe",
+                "sha256": "34c63ac2f49ce9ea3675332cf49ecfa0b0885b34fe4a7c0e8c224634cc4e1145",
+                "size": 3530336
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/elevation_service.exe",
+                "sha256": "2d400c6c968b16f60aa2e9d07051d4f63e0e75ae8cfe24a9a959d7940ce76822",
+                "size": 2334816
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/eventlog_provider.dll",
+                "sha256": "efe30a3ae8fd75f34b0aef55a27f265fa2c7d655581e6320ac4b1f74e335cdf9",
+                "size": 16480
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/icudtl.dat",
+                "sha256": "5070de99fbd8a48378543511fb7a072f85bf36f94b4f4e1d420d54be1435d6f1",
+                "size": 10467680
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/libEGL.dll",
+                "sha256": "5d56f70717f7e1df4a1906a16ed930903a6c45dc35b42df7cc3beb2acf4c2441",
+                "size": 512096
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/libGLESv2.dll",
+                "sha256": "faeec00787001055f4b7d8e8e0e0576bdc23fdd5efdbe971035e9ca6e8fc810d",
+                "size": 7898720
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/notification_helper.exe",
+                "sha256": "1be9b283c4bd20197cb0d56171019b0da880d25f66826f452e1b3b248d9d7eff",
+                "size": 1685600
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/optimization_guide_internal.dll",
+                "sha256": "45d359d5016c6aa8da00d6b046fdebac41ae5d015aa9a839e077be2075a0f623",
+                "size": 11742304
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/os_update_handler.exe",
+                "sha256": "4daad4ab5320d0f1835abd92d77e93a53036c839832686eba535e818e62b5d42",
+                "size": 1844832
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/resources.pak",
+                "sha256": "a0be18793e04999502cb32366860dae0cae117efea158ef9994b317b6a391323",
+                "size": 12006720
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/v8_context_snapshot.bin",
+                "sha256": "2426b192797ec310889789229011705fc0968d16a6e4e70e6b176330288eb5e4",
+                "size": 699577
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/vk_swiftshader.dll",
+                "sha256": "34a1d95ffbf1d1081be21f68855c18e15908147788e124c9f8e4514deb8eab12",
+                "size": 5357664
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/vk_swiftshader_icd.json",
+                "sha256": "32d83ff113fef532a9f97e0d2831f8656628ab1c99e9060f0332b1532839afd9",
+                "size": 106
+              },
+              {
+                "path": "portable/App/Chrome-bin/138.0.7204.97/vulkan-1.dll",
+                "sha256": "3787c05c258ee1646482210550446caea076452754b36321de0da858a90d5d13",
+                "size": 910432
+              },
+              {
+                "path": "portable/App/Chrome-bin/First Run",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "size": 0
+              },
+              {
+                "path": "portable/App/Chrome-bin/chrome.exe",
+                "sha256": "d9ae6af6e6d58a24992367595fde6524968fec8dd79bf9b2b63a76b10bf3a00b",
+                "size": 3196512
+              },
+              {
+                "path": "portable/App/Chrome-bin/chrome_proxy.exe",
+                "sha256": "02ac0386580c37cd3cc4e1e173f8bdccdfa5aa9cdace3628c13efa18c3e34206",
+                "size": 1466976
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

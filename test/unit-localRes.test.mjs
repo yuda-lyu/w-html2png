@@ -5,6 +5,7 @@ import assert from 'assert'
 import { pathToFileURL } from 'url'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { decodePng, classifyCenter } from './tools/png.mjs'
+import { setBinEnv } from './tools/binEnv.mjs'
 
 
 //已知限制(文件化): 未給funGetUrl時以setContent(about:blank)載入, html內本機file://與相對路徑資源不載入; data url與funGetUrl(goto file://)可載入
@@ -16,11 +17,13 @@ describe('unit-localRes', function() {
 
     let fpImg = null
     let dataUrl = ''
+    let restoreBin = null
 
-    before(function() {
+    before(async function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
+        restoreBin = await setBinEnv('localResMirror') //套件自帶之chrome由本機鏡像經ensureBins取得, 不連外網
         fs.rmSync(fdTest, { recursive: true, force: true })
         fs.mkdirSync(path.join(fdTest, 'html'), { recursive: true })
         let b = Buffer.from(fs.readFileSync(path.resolve('./test/test-scla.b64'), 'utf8'), 'base64')
@@ -33,6 +36,9 @@ describe('unit-localRes', function() {
     after(async function() {
         await WHtml2png.close()
         fs.rmSync(fdTest, { recursive: true, force: true })
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     let draw = async (src, opt = {}) => {

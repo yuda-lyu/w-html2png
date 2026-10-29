@@ -1,6 +1,11 @@
 node_modules
-chrome
+# chrome/ 為 1.0.53 以前各版之下載來源(自主幹取分片),保留於 repo、不入包(2026-10-29 主控)
+/chrome/
 _convertTemp
+# 根目錄之手動試跑範例與其輸出圖,不入包
+/scla.mjs
+/sclb.mjs
+/test-scl*.png
 .agents
 .opencode
 .claude
@@ -9,7 +14,12 @@ AGENTS*.md
 .env
 tmp
 testPending
-test/_tmp
+/test/_tmp/
+
+# 外部執行檔(規格S1、S5): bin/只有清單入包, 快取不入包
+/bin/*
+!/bin/manifest.json
+/bin-cache/
 
 # 指引要求文件入 git 版控、不入 npm 包(2026-10-22)
 sgud

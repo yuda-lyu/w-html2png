@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import WHtml2png from '../src/WHtml2png.mjs'
 import errToMsg from '../src/errToMsg.mjs'
 import runChild from './tools/child.mjs'
+import { setBinEnv } from './tools/binEnv.mjs'
 
 
 //規則R6: reject一律字串且保留原因、去除ANSI、寫錯誤檔失敗不覆蓋原因; 規則R15: 給executablePath時不限平台
@@ -17,13 +18,21 @@ let fpSrc = fileURLToPath(new URL('../src/WHtml2png.mjs', import.meta.url))
 
 describe('unit-errors', function() {
 
-    before(function() {
+    let restoreBin = null
+
+    before(async function() {
         fs.rmSync(fdTest, { recursive: true, force: true })
         fs.mkdirSync(fdTest, { recursive: true })
+        if (process.platform === 'win32') {
+            restoreBin = await setBinEnv('errorsMirror') //套件自帶之chrome由本機鏡像經ensureBins取得, 不連外網
+        }
     })
 
     after(function() {
         fs.rmSync(fdTest, { recursive: true, force: true })
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     it('errToMsg: Error, string, null, object and ANSI codes', function() {

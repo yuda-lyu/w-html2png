@@ -5,6 +5,7 @@ import assert from 'assert'
 import { fileURLToPath } from 'url'
 import WHtml2png from '../src/WHtml2png.mjs'
 import runChild from './tools/child.mjs'
+import { setBinEnv } from './tools/binEnv.mjs'
 
 
 //規則R12: alive只有瀏覽器層錯誤才重啟常駐瀏覽器(其他並發呼叫不受頁面層錯誤牽連); WHtml2png.close()後, close前開始之呼叫不再重試重啟, 行程可自然結束
@@ -17,17 +18,23 @@ let waitMs = (ms) => new Function(`window.__t0 = window.__t0 || Date.now(); retu
 
 describe('unit-alive', function() {
 
-    before(function() {
+    let restoreBin = null
+
+    before(async function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
         fs.rmSync(fdTest, { recursive: true, force: true })
         fs.mkdirSync(fdTest, { recursive: true })
+        restoreBin = await setBinEnv('aliveMirror') //套件自帶之chrome由本機鏡像經ensureBins取得(子行程繼承環境變數), 不連外網
     })
 
     after(async function() {
         await WHtml2png.close()
         fs.rmSync(fdTest, { recursive: true, force: true })
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     it('a page-level failure of one call does not break concurrent calls', async function() {

@@ -46,3 +46,29 @@
 ### 其他
 - `npm i lodash@^4.17.21` 實際裝入 4.18.1 並寫成 `^4.18.1`(與 CDN 現版相同),使「頁內 _.VERSION 等於本機版本」之斷言無法分辨本機或 CDN;改以 `context.setOffline(true)` 斷言才有分辨力。
 - H3(alive 每次新 context)實測中位數 694ms vs 重用 634ms(+約 10%),依裁示未採。
+
+## 2026-10-29 bin-html2png(改用 wsemi fsEnsureBins 之檔案組)
+
+上兩節中「chrome 依 cwd/套件根之 `chrome/` 定位」「`ensureChrome`/`legacy:false`」「w-hc2png 測試以 junction 指 repo/chrome」等已隨自寫下載移除而不適用;現況見 `sgud/state/state.md`。
+
+### 組之內容
+- 舊碼直接啟動 `portable/App/Chrome-bin/<版本>/chrome.exe`(playwright 自給 user-data-dir),不經 `GoogleChromePortable.exe`;只含 `Chrome-bin/` 之組出圖與舊 portable 逐像素相同(testa、testb 對基準圖差 0)。查證腳本作法:以 `bin/chrome` 分割硬連結建本地鏡像 → `ensureBins({ cacheDir, mirror, offline:true })` → 兩個 chrome 各出圖比對。
+
+### 測試供檔
+- 出圖測試以 `test/tools/binEnv.mjs` 之 `await setBinEnv(tag)`:鏡像為 `bin/chrome` 分割之硬連結(不佔空間;只刪連結不動原檔;**不可對硬連結檔做竄改類測試**,竄改一律用假組或複本),組放預設快取 `<repo>/bin-cache/`(各測試檔共用)。冷跑(無 bin-cache)時 8 個 worker 各自解出再發布('exists'),約 +10 秒。
+- 取得邏輯之測試用 `test/tools/fakeBundle.mjs`(同形小組:3 分割、5 成員＋1 個不列入之檔),假套件根為 `src/ensureBins.mjs`、`src/pkgRoot.mjs` 之副本＋假清單(`getFdPkg` 須 package.json 之 name 為 w-html2png),故變異 src 仍會被測到。
+- fsEnsureBins 之同程序併發共用以「來源設定相同」判定,`fetch` 為每次新建之閉包時不共用('solo');併發測試須傳同一 fetch 參照。WHtml2png 不傳 fetch,故併發首呼叫共用同一次取得。
+- 平行全套下各 worker 之首次校驗(雜湊 421MB)同時發生,會放大產品既有之頁面事件競態(`pageerror` 晚到、load 內塗色未入截圖);`setBinEnv` 於 before 先取得校驗一次使其不與出圖重疊。舊碼(定位只看完成標記)無此負載。
+
+### 頁面事件競態之查證法
+- 負載試驗:7 個行程反覆雜湊 `bin/chrome` 分割(CPU＋磁碟),單鎖內交替跑修前副本與現行碼之同一測試檔,比對失敗次數(`unit-pageError`「page errors are retried」舊 8/10、新 8/10 → 既有競態)。
+- 歸因試驗須在他套件未佔另一槽時做;同時段他套件之變異測試會使失敗率劇烈上升(12 次中 9 次),結果不可用於歸因。
+- 純 playwright 仿 single 流程(goto file://、頁尾 inline 拋錯、networkidle)20/20 於 goto 完成前收到 `pageerror`,故競態不在 playwright 之基本送達;下一步應在 WHtml2png 流程(`routeLibs` 之 route 攔截、模板)內以觀察回調記錄事件時點。
+- mocha 之 JSON 報告(`--reporter json`)便於重複跑時收集失敗之案;要留失敗訊息時另存 `failures[].err.message`(本輪未存,事後無法回看)。
+
+### 修前副本
+- `git archive HEAD -- . ':(exclude)bin' ':(exclude)chrome'` 解到 `./tmp/<任務>/before/`,分割硬連結、`chrome/portable` 由分割解出、`node_modules` 以 junction 指回 repo;舊碼需 `w-zip`,以 `npm i --no-save w-zip@1.0.49` 暫裝(不改 package.json/lock),結束 `npm i` 清除。刪副本前先 `cmd //c rmdir` 拆 junction 並回驗 repo 之 node_modules 完好。
+
+### 工具
+- ESLint 8 以非 ASCII 絕對路徑為參數時回「No files matching」;以 `quiet-run --cwd <repo> -- npx eslint --ext .mjs src test` 之相對路徑執行。
+- 1.0.53 以前之 `downloadFiles` 自 `github.com/yuda-lyu/w-html2png/raw/refs/heads/master/chrome/` 下載;1.0.54 起釘 `5ebfb11f…`。查舊版下載來源用 `git grep -n "github" <提交>^ -- src`。

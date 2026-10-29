@@ -5,17 +5,17 @@ import assert from 'assert'
 import { builtinModules, createRequire } from 'module'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { placeFakeExe } from './tools/fakeChrome.mjs'
+import { makeFakeBundle, putMirrorParts } from './tools/fakeBundle.mjs'
+import { setBinEnv, getChromeExe } from './tools/binEnv.mjs'
 import { decodePng, countNonWhite, diffCount } from './tools/png.mjs'
 import runChild from './tools/child.mjs'
 import WHtml2png from '../src/WHtml2png.mjs'
 
 
-//規則R4、R8: 由現行src建出dist至test/_tmp(不改寫repo之dist/): 離開碼0、0筆could not be resolved、無invalid runin; 語法錯以非0結束; 外部模組⊆Node內建∪dependencies; dist可載入、定位與cwd無關、出圖與src容差內
+//規則R4、R8: 由現行src建出dist至test/_tmp(不改寫repo之dist/): 離開碼0、0筆could not be resolved、無invalid runin; 語法錯以非0結束; 外部模組⊆Node內建∪dependencies; dist可載入、取得chrome之快取在其套件根(與cwd無關)、出圖與src容差內
 let fdTest = path.resolve('./test/_tmp/dist')
 let fdRepo = path.resolve('.')
 let fpChild = fileURLToPath(new URL('./tools/childDraw.mjs', import.meta.url))
-let ver = '138.0.7204.97'
 
 
 let prep = (name, mutate = null) => {
@@ -45,16 +45,23 @@ describe('unit-dist', function() {
 
     let fdOk = null
     let resOk = null
+    let restoreBin = null
 
-    before(function() {
+    before(async function() {
         fs.rmSync(fdTest, { recursive: true, force: true })
         fdOk = prep('ok')
         resOk = build(fdOk)
+        if (process.platform === 'win32') {
+            restoreBin = await setBinEnv('distMirror') //套件自帶之chrome由本機鏡像經ensureBins取得, 不連外網
+        }
     })
 
     after(async function() {
         await WHtml2png.close()
-        fs.rmSync(fdTest, { recursive: true, force: true })
+        fs.rmSync(fdTest, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     it('build exits 0 without unresolved imports or invalid runin', function() {
@@ -93,28 +100,44 @@ describe('unit-dist', function() {
         assert.strict.equal(typeof W.close, 'function')
     })
 
-    it('dist installed in a project locates chrome by module position from a subfolder cwd', async function() {
+    it('dist installed in a project obtains the bundle chrome by ensureBins into the cache under its package root from a subfolder cwd, and launches its chrome.exe', async function() {
+        if (process.platform !== 'win32') {
+            this.skip()
+        }
+        //小型假組(同形; chrome.exe非瀏覽器, 啟動必失敗, 錯誤訊息含實際啟動之路徑), 以本地鏡像離線供檔: 驗dist之ensureBins(含以tar解出成員)、快取位置與啟動路徑
+        let fb = makeFakeBundle(path.join(fdTest, 'cons'))
         let fdPkg = path.join(fdTest, 'cons', 'proj', 'node_modules', 'w-html2png')
+        let fdSub = path.join(fdTest, 'cons', 'proj', 'sub')
+        let fdMirror = path.join(fdTest, 'cons', 'mirror')
         fs.mkdirSync(path.join(fdPkg, 'dist'), { recursive: true })
-        fs.mkdirSync(path.join(fdTest, 'cons', 'proj', 'sub'), { recursive: true })
+        fs.mkdirSync(path.join(fdPkg, 'bin'), { recursive: true })
+        fs.mkdirSync(fdSub, { recursive: true })
         fs.copyFileSync(path.join(fdRepo, 'package.json'), path.join(fdPkg, 'package.json'))
         fs.copyFileSync(path.join(fdOk, 'dist', 'w-html2png.umd.js'), path.join(fdPkg, 'dist', 'w-html2png.umd.js'))
-        let fpExe = placeFakeExe(path.join(fdPkg, 'chrome'), ver, { content: 'not a browser' })
+        fs.writeFileSync(path.join(fdPkg, 'bin', 'manifest.json'), JSON.stringify(fb.manifest))
+        putMirrorParts(fdMirror, fb.parts)
         let cfg = { mod: path.join(fdPkg, 'dist', 'w-html2png.umd.js'), cjs: true, opt: { retry: 1 } }
-        let r = await runChild(fpChild, { cwd: path.join(fdTest, 'cons', 'proj', 'sub'), env: { CHILD_CFG: JSON.stringify(cfg), W_HTML2PNG_CHROME_DIR: '' } })
+        let r = await runChild(fpChild, { cwd: fdSub, env: { CHILD_CFG: JSON.stringify(cfg), W_BIN_MIRROR: fdMirror, W_BIN_OFFLINE: '1', W_BIN_CACHE: '' } })
         assert.ok(r.result, r.out.slice(-500))
-        assert.strict.equal(r.result.ok, false) //假執行檔必然啟動失敗, 訊息含實際啟動之路徑
+        assert.strict.equal(r.result.ok, false)
+        let fpExe = path.join(fdPkg, 'bin-cache', fb.bundleId, ...fb.relExe.split('/'))
         assert.ok(r.result.err.includes(fpExe), r.result.err.slice(0, 600))
-        assert.strict.deepStrictEqual(fs.readdirSync(path.join(fdTest, 'cons', 'proj', 'sub')), [])
+        for (let m of fb.members) {
+            let fp = path.join(fdPkg, 'bin-cache', fb.bundleId, ...m.path.split('/'))
+            assert.strict.equal(Buffer.compare(fs.readFileSync(fp), m.bytes), 0, m.path)
+        }
+        assert.strict.deepStrictEqual(fs.readdirSync(fdSub), []) //不寫入工作目錄
     })
 
     it('dist renders the same as src (tolerance)', async function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
+        //dist之套件根(test/_tmp/dist/ok)無清單, 兩者皆給同一chrome(ensureBins取得之組內chrome.exe); dist取得chrome之接線見上一案
+        let fpExe = await getChromeExe()
         let html = '<div style="padding:10px;font-size:20px;">Panel $& Title</div>'
         let Wd = createRequire(import.meta.url)(path.join(fdOk, 'dist', 'w-html2png.umd.js'))
-        let a = decodePng(await Wd(300, 80, 2, html, { retry: 1 }))
+        let a = decodePng(await Wd(300, 80, 2, html, { executablePath: fpExe, retry: 1 }))
         let b = decodePng(await WHtml2png(300, 80, 2, html, { retry: 1 }))
         assert.ok(countNonWhite(a) > 1000)
         let d = diffCount(a, b)

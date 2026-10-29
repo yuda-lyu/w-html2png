@@ -4,6 +4,7 @@ import path from 'path'
 import assert from 'assert'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { decodePng, countNonWhite, diffCount } from './tools/png.mjs'
+import { setBinEnv } from './tools/binEnv.mjs'
 
 
 //規則R9: 出圖以語意斷言(PNG、尺寸、非白像素)為主, 對既有基準圖以容差比對為補強(通道差>16之像素數不超過總像素0.1%), 不逐位元; 超容差時把出圖與基準圖落於./testPending/
@@ -111,15 +112,21 @@ async function testb() {
 
 describe(`unit-WHtml2png`, function() {
 
-    before(function() {
+    let restoreBin = null
+
+    before(async function() {
         if (!isWindows()) {
             this.skip() //套件自帶之免安裝chrome只支援Windows
         }
+        restoreBin = await setBinEnv('WHtml2pngMirror') //套件自帶之chrome由本機鏡像(bin/chrome之分割)經ensureBins取得, 不連外網
     })
 
     after(async function() {
         //關閉常駐瀏覽器, 使測試結束後Node行程可立即退出
         await WHtml2png.close()
+        if (restoreBin) {
+            restoreBin()
+        }
     })
 
     it(`should return (base64) when run testa `, async function() {
