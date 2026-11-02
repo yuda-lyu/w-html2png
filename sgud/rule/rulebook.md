@@ -45,9 +45,10 @@
 - 測試:`test/unit-pageError.test.mjs`。
 
 ### R8 建置
-- `toolg/gDistRollup.mjs`:`runin:'nodejs'`;external/globals 涵蓋所有用到之 Node 內建模組與 `playwright-core`(含 wsemi `fsEnsureBins` 所需之 `url`、`crypto`、`stream`、`stream/promises`、`child_process`、`os`);失敗時印出並 `process.exitCode = 1`(不得只 `console.log`)。
+- `toolg/` 之發布與建置腳本(`gDistRollup.mjs`、`cleanFolder.mjs` 等)依 `C:\opensrcOper\dspec\自有套件之發布與建置腳本.md`,本套件不另立寫法(2026-11-02 起;原「以腳本位置推導 `src`/`dist`」已依該文件撤,改回 `'./src'`、`'./dist'`)。
+- `toolg/gDistRollup.mjs` 之選項:`runin:'nodejs'`;external/globals 涵蓋所有用到之 Node 內建模組與 `playwright-core`(含 wsemi `fsEnsureBins` 所需之 `url`、`crypto`、`stream`、`stream/promises`、`child_process`、`os`);失敗時印出並 `process.exitCode = 1`(不得只 `console.log`)。
 - 盤點:Grep `catch` 於 `toolg/gDistRollup.mjs`。
-- 測試:`test/unit-dist.test.mjs`(由 src 建至 `test/_tmp`:離開碼 0、0 筆 could not be resolved、無 invalid runin;語法錯 → 離開碼 1)。
+- 測試:`test/unit-dist.test.mjs`(依 dspec 規則 4:把 `src/`、`toolg/gDistRollup.mjs`、`package.json` 複製到 `test/_tmp/dist/<名>/`,以 `spawn` 指定 cwd 執行 toolg 腳本;離開碼 0、0 筆 could not be resolved、無 invalid runin、產物存在、外部模組 ⊆ Node 內建 ∪ dependencies、可載入並匯出 `close`;語法錯 → 離開碼 1)。`test/unit-binManifest.test.mjs` 另以文字檢查 `globals` 與 `external` 同一份且涵蓋上列模組。
 
 ### R9 測試寫法
 - 出圖斷言以語意(PNG、尺寸、非白像素、頁內自檢色)為主,對基準圖用容差比對(通道差>16 之像素數 ≤ 門檻),不逐位元;超容差三聯組落 `./testPending/`。
@@ -64,7 +65,7 @@
 - 測試:`test/unit-binManifest.test.mjs`(清單形狀、分割與組合之雜湊＝實檔、釘選提交之位元組＝工作樹、npm 包無分割)。
 
 ### R11 頁面注入之函式庫以本機供應(D-3:C3)
-- 模板網址不變(`https://cdn.jsdelivr.net/npm/lodash/lodash.min.js`、`…/wsemi/dist/wsemi.umd.js`),以 `context.route` 由本機 `lodash/lodash.min.js`(相依 `lodash`)與 `wsemi/dist/wsemi.umd.js` 供應;每行程讀檔一次快取。
+- 模板網址:lodash 為 `https://cdn.jsdelivr.net/npm/lodash/lodash.min.js`;自有套件 wsemi 為 `https://yuda-lyu.github.io/wsemi/dist/wsemi.umd.js`(2026-11-02 依 dspec〈自有套件之瀏覽器端取用與gh-pages〉規則 2 自 jsDelivr `/npm/` 改指 gh-pages),以 `context.route` 由本機 `lodash/lodash.min.js`(相依 `lodash`)與 `wsemi/dist/wsemi.umd.js` 供應;每行程讀檔一次快取。
 - 本機檔案先自本套件根解析(`src/pkgRoot.mjs`,被打包進他套件時仍可得),再自模組位置解析;皆不可得時不攔截該網址(維持自 CDN 載入之舊行為)並於 stderr 提示一次,不得使出圖失敗。
 - 測試:`test/unit-cdnLibs.test.mjs`(頁內 `_.VERSION` 等於已安裝之 lodash 版本、`w` 可用)。
 
@@ -73,7 +74,7 @@
 - 測試:`test/unit-alive.test.mjs`(頁面層錯誤不連累並發呼叫;close 時有進行中呼叫不重啟;close 發生於等待 funGetUrl 期間不啟動瀏覽器)。
 
 ### R13 安裝完成與清掃(2026-10-29 廢止)
-- 完成標記、擁有標記、`.dl-*`/`.old-*`/`.lock-*` 之清掃隨自寫下載一併移除;快取之完整性改為每行程首次逐檔校驗(R16、dspec D4)。`src/` 寫檔站點全集見 R5。`toolg/gDistRollup.mjs` 清空 `dist/` 之路徑以腳本位置推導(不變)。
+- 完成標記、擁有標記、`.dl-*`/`.old-*`/`.lock-*` 之清掃隨自寫下載一併移除;快取之完整性改為每行程首次逐檔校驗(R16、dspec D4)。`src/` 寫檔站點全集見 R5。`toolg/gDistRollup.mjs` 依 dspec〈自有套件之發布與建置腳本〉(見 R8;原「清空 `dist/` 之路徑以腳本位置推導」於 2026-11-02 撤)。
 
 ### R14 安裝時不下載(2026-10-29 改寫;原「postinstall 與執行期同一函式」廢止)
 - `package.json` 無 `postinstall`/`install`/`preinstall`;`scripts/install.mjs` 已移除(dspec D1)。

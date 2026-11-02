@@ -13,7 +13,7 @@ let tpl = `
 
   <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
 
-  <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.js"></script>
+  <script src="https://yuda-lyu.github.io/wsemi/dist/wsemi.umd.js"></script>
   <script>
       let w = wsemi
   </script>

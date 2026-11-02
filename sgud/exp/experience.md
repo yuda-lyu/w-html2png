@@ -23,7 +23,7 @@
 - 兄弟套件 8 個(w-kriging、w-html2docx、w-docx2pdf、w-ffmpeg、w-docx2html、w-docx-split、w-process-status、w-dwload-dlp)沿用相同 autoDownloadFiles 樣式,不是本套件之下游。
 
 ### 建置驗證
-- `toolg/gDistRollup.mjs` 寫死 `./src`、`./dist`(相對 cwd):驗證時把 src 與該腳本複製到 `tmp/build/<變體>/`,以 spawn 明定 cwd 執行,絕不在 repo 根跑(會清空 repo 之 dist)。
+- `toolg/gDistRollup.mjs` 寫死 `./src`、`./dist`(相對 cwd):驗證時把 src 與該腳本複製到 `tmp/build/<變體>/`,以 spawn 明定 cwd 執行,絕不在 repo 根跑(會清空 repo 之 dist)。(2026-11-02 依 dspec〈自有套件之發布與建置腳本〉撤,改回標準寫法)
 
 ## 2026-10-16 實作 run03
 

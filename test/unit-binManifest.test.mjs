@@ -172,7 +172,7 @@ describe(`bin/manifest.json`, function() {
         assert.strict.deepStrictEqual(fps.filter((v) => v.startsWith('bin/') || v.startsWith('bin-cache/')), ['bin/manifest.json'])
         assert.strict.deepStrictEqual(fps.filter((v) => v.startsWith('chrome/') || v.startsWith('scripts/')), []) //舊位置與postinstall腳本不入包
         assert.strict.deepStrictEqual(fps.filter((v) => /^src\/(autoDownloadFiles|downloadFiles|chromeManifest|fileLock)\.mjs$/.test(v)), [])
-        assert.strict.deepStrictEqual(fps.filter((v) => v.startsWith('test/_tmp/') || v.startsWith('sgud/')), [])
+        assert.strict.deepStrictEqual(fps.filter((v) => v.startsWith('test/_tmp/')), []) //sgud/自2026-11-01起隨npm包發布(專案CLAUDE.md; .npmignore不再列sgud), 不再要求不入包
         assert.strict.equal(fps.includes('src/ensureBins.mjs'), true)
     })
 

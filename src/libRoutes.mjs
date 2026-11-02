@@ -4,10 +4,10 @@ import { createRequire } from 'module'
 import getFdPkg from './pkgRoot.mjs'
 
 
-//libs, 頁面模板引用之函式庫網址(維持不變)與本機檔案(相依lodash、wsemi)
+//libs, 頁面模板引用之函式庫網址與本機檔案(相依lodash、wsemi); 自有套件wsemi之網址指其gh-pages(dspec〈自有套件之瀏覽器端取用與gh-pages〉規則2)
 let libs = [
     { url: 'https://cdn.jsdelivr.net/npm/lodash/lodash.min.js', mod: 'lodash/lodash.min.js' },
-    { url: 'https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.js', mod: 'wsemi/dist/wsemi.umd.js' },
+    { url: 'https://yuda-lyu.github.io/wsemi/dist/wsemi.umd.js', mod: 'wsemi/dist/wsemi.umd.js' },
 ]
 
 
