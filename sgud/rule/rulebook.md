@@ -41,8 +41,8 @@
 - 測試:`test/unit-errors.test.mjs`。
 
 ### R7 頁面端失敗可被呼叫端得知(D-1:P1)
-- `opt.rejectOnPageError`(預設 false):監聽 `pageerror`,截圖前有錯即視為該次失敗(訊息含全部頁內錯誤),依 `retry` 重試。預設行為不變。
-- 測試:`test/unit-pageError.test.mjs`。
+- `opt.rejectOnPageError`(預設 false):監聽 `pageerror`,截圖前有錯即視為該次失敗(訊息含全部頁內錯誤),依 `retry` 重試。預設行為不變。檢查之時點須於頁面完成之後(R18),否則晚於 `networkidle` 之頁面錯誤會漏判。
+- 測試:`test/unit-pageError.test.mjs`、`test/unit-pageSettle.test.mjs`、`test/unit-pageSettleFake.test.mjs`。
 
 ### R8 建置
 - `toolg/` 之發布與建置腳本(`gDistRollup.mjs`、`cleanFolder.mjs` 等)依 `C:\opensrcOper\dspec\自有套件之發布與建置腳本.md`,本套件不另立寫法(2026-11-02 起;原「以腳本位置推導 `src`/`dist`」已依該文件撤,改回 `'./src'`、`'./dist'`)。
@@ -94,6 +94,41 @@
 - 測試對應(§8):T1、T2、M4、D1、E2 → `test/unit-binManifest.test.mjs`;T3(真組 421MB 一案)、T3~T7(同形假組)、D3 與 cwd 無關、不轉傳 floatingManifestUrl、主函數入口(全域 fetch 攔截、啟動之 chrome 為組內者、給 executablePath 不取組、取不到之字串)→ `test/api-ensureBins.test.mjs`;dist 經 ensureBins 取組並啟動 → `test/unit-dist.test.mjs`。T8(主幹模式)不適用。
 - 改動範圍 → 測試:本套件無 `e2e-` 檔;全套 `npm test` 約 30 秒(暖)~40 秒(冷,首次解出),每輪跑全套。
 
+### R17 單次出圖之允許時長 `opt.timeout`:未給即與現行完全相同;瀏覽器卡死時限時處置,強制結束須確認歸屬(2026-11-03 h2p60,Gitea #60)
+- 來源:Gitea #60(liqproc):以真 chrome 暫停行程實測,`context.newPage()`、`page.close()`、`browser.close()` 無時限,卡住時 `opt.retry` 不起作用,呼叫端無從判斷。
+- 規則:
+  1. **輸入**:`opt.timeout` 以 wsemi `isenum(v, { use: 'positive', max: 2147483647 })` 判定,有效(數字或數字字串)取 `Number(v)`,其餘(含超過計時器上限)一律視為未給(null,不限時)——dspec〈輸入參數之檢測機制〉K3、N2 範圍子型。未實作 `opt.debug`(該規格草案;本函數其他 opt 鍵亦無)。
+  2. **未給時不變(P3)**:`timeout === null` 時 `execLimited` 直接 `exec`;不取 pid(不查 CDP)、不建 `raceLimit` 計時器、`WHtml2png.close()` 與閒置關閉對未曾給過 `timeout` 之世代維持不限時 `await browser.close()`(`closeGen` 之 `g.guarded !== true` 分支);single 之 `release` 為單次 `browser.close()`。
+  3. **每次嘗試**各有此時長(`raceLimit(exec, timeout)`),逾時視為該次失敗依 `retry` 重試;訊息 `timeout[Nms] in <步驟>` 加註處置結果(`notes`);步驟名由 `setStep` 記錄(與 `onTrace` 之 `step` 事件同源)。重試前等待 5 秒不變,不計入 `timeout`。
+  4. **頁面層**:逾時時已有頁面且 `timeProbe`(5 秒)內關得掉 → 瀏覽器可回應,不重啟,不牽連並發呼叫(R12);single 之瀏覽器為本呼叫專屬,照常釋放。
+  5. **瀏覽器層**:已開始取用瀏覽器(`c.useBrowser`)且無頁面或頁面關不掉 → alive 關閉**本呼叫所用**之世代(`onToken` 於 `getGen` 後立即回報,非逾時當下之現行世代;`closeGen` 先歸零 `gen`,下次呼叫即啟動新世代,不論是否再重試)、single 釋放專屬瀏覽器。尚未取用瀏覽器(`funGetUrl` 卡住等)不動瀏覽器,只刪暫存 html。啟動中(`g.browser === undefined`)不等待啟動,完成後於背景關閉。
+  6. **強制結束**(全域設定 §8.6):`closeBrowser` 於 `timeClose`(10 秒)內關不掉(或 `browser.close()` 拋錯而仍連線),才經 `killBrowser` 以 wsemi `execProcessKillPid`(樹狀;不用 `child.kill()`;結束指令本身限 `timeProbe`)結束;**結束前須確認歸屬**:pid 取自本瀏覽器自身 CDP 連線(`getBrowserPid`,`timeProbe` 限時;給了 `timeout` 者 alive 每世代共用、取不到最多再試一次〔`ensurePid`〕,single 每次啟動查一次)且瀏覽器仍連線(`isConnected()`)——已斷線(`gone`)、pid 未取得(`no-pid`)、連線狀態不明(`unverified`)皆**不殺**並於訊息寫明;pid 於結束當下才取值(關閉等待期間才查得者可用);結束後以 `disconnected` 事件回驗(`killed`/`unconfirmed`)。同一世代之關閉共用同一次處置(`g.pmClose`),不重複關閉或結束。判準為歸屬與健康,不用年齡。
+  7. **被放棄之嘗試**不被等待:`c.cancelled` 使其於 `strategy.acquire`、`context.newPage()`、等待 `funGetUrl` 之後不再往下取用瀏覽器(`cancelled` 事件),取得者立即釋放,頁面步驟返回後不再往下(`checkCancelled`);single 於瀏覽器啟動完成即登記釋放函數(`onRelease`),其後取 pid 或建 context 卡住而逾時仍可關閉;其錯誤檔不覆寫逾時處置所寫者。計時器先於 `exec` 建立,使 `funGetUrl` 等同步前置耗時亦計入。
+  8. **觀察回調** `opt.onTrace`(dspec〈計時器相關函數之觀察回調與測試〉):沿用 wsemi `getTrace`;事件 `attempt`、`step`、`timeout`、`page-close`、`browser-close`、`browser-kill`、`cancelled`、`retry`;未傳時不組事件物件。
+- 站點全集與盤點:
+  - Grep `setTimeout\(` 於 `src/WHtml2png.mjs`:`raceLimit`(逾時與限時探測之唯一擁有者)、`scheduleIdleClose`(閒置關閉,既有);另 `delay(5000)`(重試等待,既有)。
+  - Grep `execProcessKillPid` 於 `src/`:只在 `killBrowser`(唯一強制結束出口);Grep `\.kill\(` 於 `src/` 須 0 筆。
+  - Grep `browser\.close\(\)` 於 `src/WHtml2png.mjs`:`closeBrowser`(限時,guarded)、`closeGen` 之 `g.guarded !== true` 分支與 single 之 unguarded `release`/建 context 失敗(不限時,維持原行為,刻意不套)。
+  - Grep `getBrowserPid\(` 於 `src/`:`ensurePid`(alive,guarded 才呼叫)與 single `acquire`(`guard` 才呼叫)。
+- 已知限制:①歸屬確認依「pid 出自本瀏覽器自身 CDP 連線 + 仍連線」,不另以作業系統查詢父行程/建立時間(Windows 上行程仍在時 pid 不會被重用;playwright 於行程結束時才發 `disconnected`,結束到事件到達及 `taskkill` 啟動間之極短窗口無從排除;Node 無法持有行程控制代碼,Job Object 須原生整合,不採);②alive 世代若在任何給 `timeout` 之呼叫碰到它之前就卡死,pid 未取得而不殺(`no-pid`);③逾時前啟動中之 Chrome 於啟動完成後才關閉(背景),啟動本身(playwright 內 60 秒 launch 時限)不被中斷;④頁面層判定為「關得掉頁面」,renderer 全被暫停時頁面仍可能關得掉,下一次嘗試才在 `context.newPage()` 卡住而重啟瀏覽器(故救回同一張圖需 `retry` ≥ 3,預設值足夠);⑤依 issue 設計,尚無頁面(啟動/開頁/建 context)逾時即關閉本呼叫所用瀏覽器,`timeout` 過短(小於最壞啟動與開頁時間)會牽連 alive 並發呼叫,JSDoc/README 已寫明;⑥計時不含 `ensureBins`(其有自身逾時)與重試前等待;⑦單次出圖成功後釋放失敗(pid 不明等)僅經該次呼叫之 `onTrace` 可見;`WHtml2png.close()`/閒置關閉之處置結果不回傳亦不通知;結束指令限時 `timeProbe` 只停止等待,不取消已啟動之 `taskkill`;同步阻塞之 JS(如同步耗時之 `funGetUrl`)不可中斷,逾時以其返回後為準;⑧被放棄之嘗試其後的 `step`/`cancelled` 事件可能在呼叫已 reject 之後才通知。
+- 測試:`test/unit-timeoutFake.test.mjs`(71 案;假瀏覽器 `test/tools/fakeChromium.mjs`:輸入檢測 33 格〔有效 7、非預期 25、getter 拋錯 1〕、門檻與重試以 `node:test` 假時鐘、頁面層/瀏覽器層/強制結束/pid 不明/已斷線不殺/啟動中/取消/funGetUrl/`close()` 限時與不限時/共用關閉/pid 延遲取值與重試/`onTrace` 五種回調案;主程序 pid 為測試啟動之真實空轉行程,以其 exit 事件驗證真的被結束或未被結束)、`test/unit-timeout.test.mjs`(8 案;真 chrome:alive/single 逾時訊息、並發不牽連〔以本機 `/ready` 事件放行〕、重試、非預期輸入出圖、時限內完成、啟動中逾時收尾)。暫停真 chrome 行程(renderer/主程序)須作業系統層暫停(Node 無跨平台 API),不入套件測試,實測證據見報告。
+- 測試寫法要點:假時鐘於整檔只啟用一次(Node `mock.timers.reset()` 清空佇列時不重設計時器之佇列位置,前案被放棄之嘗試其後才執行的 `clearTimeout(舊計時器)` 會依殘留位置移除新佇列中他人之計時器,造成偶發懸置;查證見 `sgud/exp/experience.md`);須等「計時器已建立」時以 `page-close-start`/`browser-close-start` 事件同步,不以固定 flush 次數。
+- 改動範圍 → 測試:改 `WHtml2png.mjs` 之 `core`/逾時處置/世代 → 全套(本套件無 `e2e-` 檔,每輪全跑)。
+
+### R18 頁面完成之判定:載入返回不代表頁面完成,檢查頁面錯誤與截圖前須等 `load` 與靜止窗(2026-11-03 h2p236)
+- 根因:playwright 之 `networkidle` 是 Node 端 500ms 計時器(`node_modules/playwright-core/lib/coreBundle.js` `_startNetworkIdleTimer`:無進行中請求即起算),與 `load` 及頁面執行進度無關;模板之 `wsemi.umd.js`(1.37MB)下載完成後,解析與執行期間沒有網路活動,此後才輪到 body 與頁尾腳本,耗時超過 500ms(負載高、腳本大、同步運算)時 `goto`/`setContent` 早於頁尾腳本返回。
+- 規則(單一擁有者 `src/WHtml2png.mjs` 之 `waitPageSettled`、`trackPage`;於 `exec` 之載入步驟與 `funPageWait` 之間呼叫):
+  1. **load**:`page.waitForLoadState('load')`。解析完成,同步腳本與 `load` 事件處理已執行。順序保證:`Runtime.exceptionThrown` 與 `Page.lifecycleEvent` 同屬主框架之 CDP session,依序送達;playwright 依序轉發(server `addPageError` → 同一 dispatcher 連線之 `pageError`、`loadstate`),故 `load` 送達用戶端時,其前之頁面錯誤必已收到。
+  2. **靜止窗**:進行中之請求清空後,以 `page.evaluate` 內 `setTimeout` 等到「自 `load` 與最後一次網路活動起 `timeSettle`(500ms)」;窗內有新活動則再開一窗。保證:頁面計時器依到期時間排序,本計時器到期時刻 ≥ `tActive` + 500ms,故 `load` 前所設、延遲 ≤ 500ms 之計時器必先執行,不受主執行緒壅塞影響;已過窗長亦往返頁面一次(1ms),使已排入之回報(未處理之 rejection 於下一個工作才回報)先處理;`evaluate` 之回應與頁面錯誤同 session 依序送達。追蹤以公開事件 `request`、`requestfinished`、`requestfailed`。
+  3. **不因等待本身失敗**:上限 `timeSettleMax`(60 秒);限時內未 load、持續有請求、頁內計時器不回應、頁內等待反覆失敗(5 次,涵蓋頁面持續導覽)皆續往下,結果經 `onTrace` 之 `page-settled` 事件可見(`settled`、`no-load`、`busy`、`no-timer`、`error`)。保留 `waitUntil: 'networkidle'`(既有之「持續有請求」於 60 秒失敗之行為不變)。
+  4. **導覽**:`evaluate` 因執行環境銷毀而失敗時重新等待新文件之 `load` 與窗。
+  5. **與 R17**:新步驟名 `waitPageSettled`;等待期間逾時之處置同其他頁面步驟;頁面關閉即結束等待(`page.on('close')`),不留 60 秒計時器。
+- 盤點:Grep `waitUntil` 於 `src/`:只在 `exec` 之 `goto`、`setContent`,其後必經 `waitPageSettled`(站點全集 2 處,皆已套);Grep `page\.screenshot|waitForFunction` 於 `src/`:只在 `exec` 且在 `waitPageSettled` 之後;Grep `page\.on\(` 於 `src/`:`pageerror`(`rejectOnPageError` 才掛)與 `trackPage` 五個事件。
+- 已知限制:①窗外之非同步(延遲超過 500ms 之計時器、巢狀計時器、窗後才發之請求)不在保證內,由 `opt.funPageWait` 表達;②請求結束與其回呼(`fetch().then`)之先後由瀏覽器排程,回呼於窗內執行屬實務保證(同為就緒工作,窗計時器至少晚 500ms 到期),非規範保證;③頁面把 `setTimeout` 換成不呼叫回呼者,等滿 60 秒才續往下;④worker、跨行程 iframe 之頁面錯誤走其他 CDP session,與主框架 `load` 無順序保證;⑤每次出圖約多 `load` 與最後一次請求結束之間的時間。
+- 測試:`test/unit-pageSettleFake.test.mjs`(假瀏覽器＋假時鐘:事件順序閘門、窗之起算、窗內請求、導覽、五種結果、與 `timeout` 之互動、回調案)、`test/unit-pageSettle.test.mjs`(真 chrome:head 內同步阻塞 1500ms 使 `networkidle` 必早於頁尾腳本,決定性重現,不依賴負載)、`test/unit-dist.test.mjs`(打包後頁內等待函數可於頁面內執行)。
+- 測試寫法:要重現本競態不必靠負載,`execJsHead` 同步阻塞 > 500ms 即可;假瀏覽器之 `cfg.load`/`cfg.settle`/`cfg.nav` 與 `page.emit`、`page.waitOrder` 控制順序。
+- 改動範圍 → 測試:改 `exec` 之載入至截圖段、`waitPageSettled`、`trackPage` → 全套。
+
 ## 已知限制
 
 - 未給 `funGetUrl` 時以 `setContent`(about:blank)載入,html 內本機 `file://` 與相對路徑資源不會載入(審計 p09 實測);須用 data URL 或給 `funGetUrl`。
@@ -102,9 +137,10 @@
 - 下載使用 Node 全域 fetch,預設不讀 HTTP(S)_PROXY(Node 24 可設 `NODE_USE_ENV_PROXY=1`)。
 - 解壓依賴 Windows 內建 `%SystemRoot%\System32\tar.exe`(bsdtar)。
 - alive 之「瀏覽器層錯誤→關閉本世代→重試成功」路徑以讀碼與單元結構保證,未以殺 chrome 行程之方式實測(會干擾平行之其他測試)。
-- 高負載下之頁面事件競態(2026-10-29 觀察,產品既有、未修):`rejectOnPageError` 之 `pageerror` 可能晚於截圖前之檢查而漏判(`unit-pageError`「page errors are retried」n=1);`setContent` 後 load 事件內之塗色可能未反映於截圖(`unit-localRes` 首案 white)。測試以 `setBinEnv` 預先校驗使 421MB 之雜湊不與出圖重疊而緩解,失敗率見 `sgud/state/state.md`。
 
 ## 破壞性/行為變更紀錄
+
+- (h2p236,2026-11-03)載入後一律等 `load` 與靜止窗(R18):每次出圖約多 `load` 與最後一次請求結束之間的時間;負載下原本會漏判之頁面錯誤改為失敗、原本空白或未完成之圖改為完整;永不 `load` 之頁面最多多等 60 秒(仍出圖);步驟名新增 `waitPageSettled`、`onTrace` 新增 `page-settled`。靜態頁面之 PNG 位元組不變。
 
 - (實作 run03,2026-10-16)見 `C:\opensrcOper\dnow\20261014075905\agent-out\run03-修正報告.md` 之行為變更清單。
 - (bin-html2png,2026-10-29)見 README〈Breaking changes〉與 `C:\opensrcOper\dnow\20261028054319\agent-out\bin-html2png-修正報告.md`:chrome 改經 `ensureBins`(快取 `bin-cache/`)、移除舊位置查找、`W_HTML2PNG_CHROME_DIR`、`W_HTML2PNG_SKIP_DOWNLOAD`、`postinstall`、`src/autoDownloadFiles.mjs` 等與主幹 `chrome/`;取不到 chrome 之字串改為 `[錯誤碼] 說明`。

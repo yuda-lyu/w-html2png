@@ -137,8 +137,18 @@ describe('unit-dist', function() {
         let fpExe = await getChromeExe()
         let html = '<div style="padding:10px;font-size:20px;">Panel $& Title</div>'
         let Wd = createRequire(import.meta.url)(path.join(fdOk, 'dist', 'w-html2png.umd.js'))
-        let a = decodePng(await Wd(300, 80, 2, html, { executablePath: fpExe, retry: 1 }))
+        let settled = []
+        let a = decodePng(await Wd(300, 80, 2, html, {
+            executablePath: fpExe,
+            retry: 1,
+            onTrace: (e) => {
+                if (e.type === 'page-settled') {
+                    settled.push(e.result)
+                }
+            },
+        }))
         let b = decodePng(await WHtml2png(300, 80, 2, html, { retry: 1 }))
+        assert.strict.deepEqual(settled, ['settled']) //規則R18: 頁內等待之函數經打包後仍可於頁面內執行(失敗時不報錯而只是不等, 須以結果斷言)
         assert.ok(countNonWhite(a) > 1000)
         let d = diffCount(a, b)
         assert.ok(d.sameSize)

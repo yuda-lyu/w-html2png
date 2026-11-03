@@ -70,7 +70,50 @@ testa()
 - **Content is inserted verbatim** (including `$&`, `$'`, `$$`). `execJsHead`/`execJsPost` are inline scripts and must not contain a literal `</script>` (write `<\/script>`). URLs in `stylesHead`/`scriptsHead` must not contain double quotes.
 - **Local files**: without `opt.funGetUrl` the page is loaded by `setContent` (about:blank), so `file://` and relative paths in the html are not loaded. Use data URLs or give `opt.funGetUrl`.
 - **Errors**: rejections are always message strings. Set `opt.rejectOnPageError: true` to reject when the page throws (default keeps returning the image).
+- **Page completion**: the page errors check and the screenshot wait for the page to finish, independent of machine load; see [頁面完成之判定](#頁面完成之判定).
 - **alive mode**: call `WHtml2png.close()` before a batch script ends so Node can exit.
+- **Time limit**: give `opt.timeout` (milliseconds per attempt) to bound a stuck render; see [單次出圖之允許時長](#單次出圖之允許時長optimeout). Without it nothing changes.
+
+## 頁面完成之判定
+
+載入(`page.goto`/`page.setContent` 之 `networkidle`)返回後,檢查頁面錯誤(`opt.rejectOnPageError`)、`opt.funPageWait` 與截圖之前,一律再等頁面確實完成:
+
+| 順序 | 等待 | 保證 |
+|---|---|---|
+| 1 | 頁面 `load` | 解析完成,同步腳本(含 `execJsHead`、`execJsPost`)與 `load` 事件處理皆已執行;其間之頁面錯誤已收到,其繪製已反映於截圖 |
+| 2 | 靜止窗:自 `load` 與最後一次網路活動起 500 毫秒內無請求,進行中之請求皆已結束;以頁面自身之計時器等待 | `load` 前所設、延遲不超過 500 毫秒之計時器已執行(不論機器多忙);其間或 `load` 事件處理所發之請求已結束;未處理之 Promise rejection 已回報 |
+
+- 為何需要:`networkidle` 只是瀏覽器外之 500 毫秒計時器,與頁面執行進度無關.頁面解析或執行腳本耗時超過 500 毫秒(機器負載高、腳本大、同步運算)時,它會早於頁尾腳本與 `load` 到達;修正前此時即檢查頁面錯誤並截圖,會漏掉頁面錯誤或拿到空白、未完成之圖.
+- 耗時:每次出圖約多 `load` 與最後一次請求結束之間的時間(一般數十至數百毫秒);`load` 早於最後一次網路活動者不增加.
+- 窗外之非同步工作(延遲超過 500 毫秒之計時器、窗結束後才發之請求)不在此保證內,請用 `opt.funPageWait` 等待其完成訊號;等待期間發生之頁面錯誤同樣於截圖前檢查.
+- 等待上限 60 秒.限時內未 `load`(如 `document.open()` 後未 `document.close()`)、請求持續進行中、頁內計時器不回應(主執行緒卡住,或頁面把 `setTimeout` 換掉而不再呼叫回呼)時不視為失敗,續往下檢查與截圖,結果可由 `opt.onTrace` 之 `page-settled` 事件得知;這類頁面每次出圖最多多等 60 秒.
+
+## 單次出圖之允許時長(opt.timeout)
+
+出圖時若 Chrome 卡住(例如 renderer 或主程序被暫停、頁內等待永不完成),預設沒有整體時限:`context.newPage()`、`page.close()`、`browser.close()` 不會逾時,卡住時 `opt.retry` 也不會起作用.給 `opt.timeout` 可限制每次嘗試之時長:
+
+```js
+let b64 = await WHtml2png(620, 235, 3, html, { mode: 'alive', retry: 3, timeout: 30000 })
+```
+
+| 項目 | 內容 |
+|---|---|
+| `opt.timeout` | 每次嘗試(含取得瀏覽器、開頁、載入、`funPageWait`、截圖、關閉)之允許時長,毫秒;有效正數(數字或數字字串),不超過 2147483647 |
+| 未給或非預期之輸入 | `undefined`、`null`、`'10s'`、`0`、負數、`Infinity`、`NaN`、物件、布林、超過 2147483647 者皆視為未給:不限時,流程與未支援前相同(不多一次 CDP 查詢、`WHtml2png.close()` 與閒置關閉不限時) |
+| 逾時 | 該次嘗試失敗,依 `retry` 重試(重試前仍等待 5 秒);訊息開頭為 `timeout[Nms] in <步驟>`,步驟如 `funGetUrl`、`strategy.acquire`、`context.newPage()`、`page.goto()`、`page.setContent()`、`waitPageSettled`、`funPageWait`、`page.screenshot()`、`page.close()`、`release()`,可據以判斷卡在哪一步 |
+| 頁面層 | 已開頁面且限時 5 秒內關得掉:瀏覽器仍可回應,不重啟,不牽連 alive 模式並發中之其他呼叫 |
+| 瀏覽器層 | 尚無頁面(啟動瀏覽器或開頁卡住)或頁面關不掉:關閉本呼叫所用之瀏覽器(alive 為本呼叫所用之常駐瀏覽器;不論是否還有重試,下次呼叫即啟動新瀏覽器;同用該常駐瀏覽器之並發呼叫會失敗,由其各自之 `retry` 接住;single 為本呼叫專屬之瀏覽器).訊息註記處置結果,如 `(browser closed)`、`(browser disconnected)`(與瀏覽器之連線已斷,不再結束行程) |
+| 強制結束 | 關閉限時 10 秒;主程序卡死時 `browser.close()` 不會返回,超過即確認該 pid 仍是本實例啟動之瀏覽器後,以 `wsemi` 之 `execProcessKillPid` 樹狀結束(Windows 為 `taskkill /T /F`).pid 於啟動時經 CDP(`SystemInfo.getProcessInfo`)自該瀏覽器自身之連線取得(卡死後 CDP 已不回應);**無法確認歸屬(pid 未取得、瀏覽器已斷線、連線狀態不明)時不殺**,並於訊息註記,如 `(browser not killed, pid unknown)` |
+| 尚未取用瀏覽器 | `funGetUrl` 卡住等逾時不動瀏覽器,只刪除暫存之 html |
+| 整次上限 | 每次嘗試最長約 `timeout` + 25 秒(5 秒關頁面、10 秒關瀏覽器、5 秒結束指令、5 秒確認斷線);整次呼叫約此值乘 `retry`,再加 5 秒乘 `retry - 1`.計時不含取得套件自帶 Chrome(`ensureBins` 有其自身逾時)與重試前之等待;小數毫秒向上取整 |
+
+- `opt.retry` 預設 3 次:renderer 全被暫停時,第一次嘗試通常關得掉頁面(不重啟),第二次才卡在 `context.newPage()` 而重啟瀏覽器,故要救回同一張圖至少需 `retry: 3`.
+- 給了 `opt.timeout` 之呼叫所用之常駐瀏覽器,其 `WHtml2png.close()` 與閒置(1 小時)自動關閉亦限時 10 秒並可強制結束;從未有呼叫給過 `opt.timeout` 之瀏覽器維持原行為(不限時等待關閉).
+- 逾時之嘗試不被等待:其進行中之步驟於頁面或瀏覽器關閉後自行結束,不再取用瀏覽器或出圖.
+- 逾時前啟動中之 Chrome(尚無瀏覽器可關)不等待啟動:啟動完成後於背景關閉;`timeout` 應涵蓋最壞之啟動與開頁時間,過短者每次嘗試都會關閉(alive 為重啟)瀏覽器,牽連並發呼叫.
+- 單次出圖成功後釋放瀏覽器失敗(如 pid 不明而關不掉)不影響回傳之圖,僅經 `opt.onTrace` 之 `browser-kill` 事件可見;`WHtml2png.close()`/閒置關閉之處置結果不回傳亦不通知(無法確認歸屬而未結束者,行程可能殘留).
+- 本套件只處置本實例啟動之瀏覽器;是否回收其他殘留行程(Node 被強制終止後遺留之 Chrome 行程樹等)仍由使用端負責.
+- `opt.onTrace`:選用之觀察回調 `(e) => {}`,`e` 為凍結之事件物件 `{ type, ... }`,於內部事件發生當下同步呼叫(拋錯與回傳值皆忽略),供測試與診斷以事件而非等待時間同步;事件 `type` 見 JSDoc.未給時行為與效能不變.
 
 ## 外部執行檔
 

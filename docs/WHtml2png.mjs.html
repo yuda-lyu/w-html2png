@@ -56,6 +56,7 @@ import isearr from 'wsemi/src/isearr.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import ispint from 'wsemi/src/ispint.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
+import isenum from 'wsemi/src/isenum.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
 import ispm from 'wsemi/src/ispm.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
@@ -63,6 +64,8 @@ import cint from 'wsemi/src/cint.mjs'
 import genID from 'wsemi/src/genID.mjs'
 import now2strp from 'wsemi/src/now2strp.mjs'
 import delay from 'wsemi/src/delay.mjs'
+import getTrace from 'wsemi/src/getTrace.mjs'
+import execProcessKillPid from 'wsemi/src/execProcessKillPid.mjs'
 import buildHtml from './buildHtml.mjs'
 import errToMsg from './errToMsg.mjs'
 import routeLibs from './libRoutes.mjs'
@@ -77,8 +80,27 @@ import ensureBins from './ensureBins.mjs'
 let timeIdle = 60 * 60 * 1000 //1hr
 
 
+//timeClose, 關閉瀏覽器之允許時長(ms), 只對曾有呼叫給opt.timeout之瀏覽器生效: 主程序卡死時browser.close()不會返回, 超過即確認pid後樹狀強制結束
+//取10秒: 正常關閉為秒級以內, 負載高時亦遠小於此; 過短會誤殺關閉較慢之健康瀏覽器, 過長則拖長逾時後之處置
+let timeClose = 10 * 1000
+
+
+//timeProbe, 輔助探測之允許時長(ms), 只對給了opt.timeout之呼叫生效: 啟動後經CDP取瀏覽器主程序pid、逾時後關閉卡住之頁面、強制結束後確認連線已斷
+//取5秒: 這些操作正常為毫秒級; 過短會把回應較慢之健康瀏覽器誤判為卡死而重啟(牽連並發呼叫), 過長則拖長逾時後之處置
+let timeProbe = 5 * 1000
+
+
+//timeSettle, 頁面靜止之觀察窗(ms): 長度同playwright之networkidle(500ms), 但自load與最後一次網路活動起算, 並以頁面自身之計時器量測(見waitPageSettled)
+let timeSettle = 500
+
+
+//timeSettleMax, 等待頁面靜止之上限(ms), 同載入、funPageWait與截圖之時限; 超過不視為失敗而續往下(如document.open後未close致永不load之頁面, 仍維持出圖)
+let timeSettleMax = 60 * 1000
+
+
 //常駐瀏覽器狀態(模組層單例), 供alive模式使用
-//gen為現行世代{ id, pmBrowser, ctxPms }: pmBrowser為chromium.launch之Promise, ctxPms為以deviceScaleFactor為key之context Promise快取; null代表下次呼叫須啟動新世代
+//gen為現行世代{ id, pmBrowser, ctxPms, browser, guarded, pmPid, pid }: pmBrowser為chromium.launch之Promise, browser為其解決後之瀏覽器(啟動中為undefined), ctxPms為以deviceScaleFactor為key之context Promise快取;
+//guarded為曾有呼叫給opt.timeout(才限時關閉並可強制結束), pmPid與pid為經CDP取得之瀏覽器主程序pid(guarded呼叫才取, 未取得為undefined, 取不到為null); null代表下次呼叫須啟動新世代
 let gen = null
 let genSeq = 0
 let closeEpoch = 0 //每次WHtml2png.close()遞增, 其前開始之呼叫不再重試重啟瀏覽器
@@ -170,6 +192,264 @@ let newContext = async (browser, scale) => {
 }
 
 
+//raceLimit, 限時等待pm(Promise或回傳Promise之函數, 函數於計時器建立後才呼叫, 使其同步前置耗時亦計入), 超過ms回傳vTimeout; 計時器於結果確定後一律清除, 不留計時器使Node行程可立即退出
+let raceLimit = async (pm, ms, vTimeout) => {
+    let timer = null
+    try {
+        let pmTimer = new Promise((resolve) => {
+            timer = setTimeout(() => {
+                resolve(vTimeout)
+            }, ms)
+        })
+        let p = isfun(pm) ? pm() : pm
+        return await Promise.race([p, pmTimer])
+    }
+    finally {
+        clearTimeout(timer)
+    }
+}
+
+
+//trackPage, 追蹤頁面之load與網路活動, 須於載入前呼叫; st.tActive為最後一次活動時刻, st.nActive為活動累計數, st.inflight為進行中之請求, st.onIdle於進行中之請求清空或頁面關閉時呼叫
+let trackPage = (page) => {
+    let st = {
+        tActive: 0,
+        nActive: 0,
+        inflight: new Set(),
+        onIdle: null,
+    }
+    let active = () => {
+        st.tActive = Date.now()
+        st.nActive++
+    }
+    let idle = () => {
+        if (st.onIdle) {
+            st.onIdle()
+        }
+    }
+    let done = (r) => {
+        st.inflight.delete(r)
+        active()
+        if (st.inflight.size === 0) {
+            idle()
+        }
+    }
+    page.on('load', active)
+    page.on('request', (r) => {
+        st.inflight.add(r)
+        active()
+    })
+    page.on('requestfinished', done)
+    page.on('requestfailed', done)
+    page.on('close', idle)
+    return st
+}
+
+
+//waitPageSettled, 等待頁面確實完成才可檢查頁面錯誤或截圖, 回傳結果字串, 不拋錯(未達成者續往下, 由其後之步驟自然反應):
+//'settled'已靜止; 'no-load'限時內未load或頁面已關閉; 'busy'限時內未能靜止(持續有請求); 'no-timer'頁面計時器未回應(主執行緒卡住或setTimeout被頁面取代); 'error'頁面內等待反覆失敗(如持續導覽)
+//playwright之networkidle只是Node端之500ms計時器(無請求進行中即起算), 與頁面執行進度無關: 頁面解析或執行腳本耗時超過500ms(負載高、腳本大、同步運算)時會早於頁尾腳本與load, 此時頁面錯誤尚未發生、內容尚未繪製, 故須另行保證:
+//1. load: 解析完成、同步腳本與load事件處理皆已執行, 其間之頁面錯誤與load事件循同一連線依序送達, load送達時錯誤必已收到
+//2. 靜止窗: 自load與最後一次網路活動起timeSettle內無請求, 且以頁面自身之計時器等待: 頁面計時器依到期時間排序, 故load前所設且延遲不超過timeSettle之計時器必先執行(不論主執行緒多忙), 其引發之請求亦被追蹤, 未處理之rejection亦已回報; 頁面內等待之回應與頁面錯誤亦循同一連線依序送達
+let waitPageSettled = async (page, st) => {
+    let tEnd = Date.now() + timeSettleMax
+    let left = () => tEnd - Date.now()
+    let nError = 0
+    while (true) {
+
+        //load, 導覽至新文件時等待新文件之load
+        let loaded = await Promise.resolve()
+            .then(() => page.waitForLoadState('load', { timeout: Math.max(left(), 1) }))
+            .then(() => true, () => false)
+        if (!loaded) {
+            return 'no-load'
+        }
+
+        //inflight, 等待進行中之請求結束
+        let idle = await raceLimit(new Promise((resolve) => {
+            st.onIdle = () => {
+                resolve(true)
+            }
+            if (st.inflight.size === 0) {
+                resolve(true)
+            }
+        }), left(), false)
+        st.onIdle = null
+        if (!idle) {
+            return 'busy'
+        }
+
+        //window, 以頁面自身之計時器等到靜止窗結束; 已過亦至少往返頁面一次(取1ms), 使已到期之計時器與已排入之回報先執行
+        let nActive = st.nActive
+        let ms = Math.min(Math.max(timeSettle - (Date.now() - st.tActive), 1), timeSettle)
+        let r = await raceLimit(
+            Promise.resolve().then(() => page.evaluate((v) => new Promise((resolve) => {
+                setTimeout(resolve, v)
+            }), ms)).then(() => 'ok', () => 'error'),
+            left(),
+            'no-timer',
+        )
+        if (r === 'no-timer') {
+            return r
+        }
+        if (r === 'error') {
+
+            //導覽使執行環境銷毀時重新等待新文件, 其他原因(如頁面已關閉)於下一輪等待load時結束; 限次數免持續導覽或頁面內持續拋錯時空轉
+            nError++
+            if (nError >= 5) {
+                return r
+            }
+            continue
+        }
+
+        //check, 窗內無新活動即靜止, 否則再等一個窗
+        if (st.nActive === nActive) {
+            return 'settled'
+        }
+        if (left() &lt;= 0) {
+            return 'busy'
+        }
+
+    }
+}
+
+
+//isPid, 是否為可用之行程pid(安全正整數)
+let isPid = (pid) => {
+    return Number.isSafeInteger(pid) &amp;&amp; pid > 0
+}
+
+
+//isConnected, 回傳瀏覽器是否仍與本行程連線: true/false, 無法判定(isConnected拋錯)回傳null
+let isConnected = (browser) => {
+    try {
+        return browser.isConnected() === true
+    }
+    catch (err) {
+        return null
+    }
+}
+
+
+//getBrowserPid, 經本瀏覽器之CDP連線取得其主程序pid; 須於瀏覽器仍可回應時取得(卡死後CDP已不回應), 逾timeProbe或失敗回傳null, 不拋錯
+//pid出自本實例所啟動之瀏覽器自身的連線, 為其後強制結束時確認歸屬之依據
+let getBrowserPid = async (browser) => {
+    let core = async () => {
+        let cdp = await browser.newBrowserCDPSession()
+        try {
+            let { processInfo } = await cdp.send('SystemInfo.getProcessInfo')
+            let r = processInfo.find((v) => v.type === 'browser')
+            return r &amp;&amp; isPid(r.id) ? r.id : null
+        }
+        finally {
+            try {
+                cdp.detach().catch(() => {})
+            }
+            catch (err) {}
+        }
+    }
+    return raceLimit(core().catch(() => null), timeProbe, null)
+}
+
+
+//waitDisconnected, 等待瀏覽器斷線事件(行程結束後playwright發出disconnected), 限時內未斷線回傳false
+let waitDisconnected = async (browser) => {
+    let off = () => {}
+    let pm = new Promise((resolve) => {
+        let fn = () => {
+            resolve(true)
+        }
+        try {
+            browser.on('disconnected', fn)
+            off = () => {
+                browser.off('disconnected', fn)
+            }
+        }
+        catch (err) {}
+        if (isConnected(browser) === false) {
+            resolve(true)
+        }
+    })
+    let r = await raceLimit(pm, timeProbe, false)
+    try {
+        off()
+    }
+    catch (err) {}
+    return r
+}
+
+
+//killBrowser, 確認pid仍是本實例所啟動之瀏覽器才樹狀強制結束(wsemi execProcessKillPid, Windows為taskkill /T /F, 不用child.kill()), 回傳結果字串:
+//'killed'已結束且確認斷線; 'gone'瀏覽器已斷線(與本行程之連線已斷, 無須也不可再殺); 'no-pid'pid未取得(無法確認歸屬)不殺; 'unverified'連線狀態無法判定不殺; 'failed'結束指令失敗或逾時; 'unconfirmed'已下結束指令但限時內未見斷線
+//歸屬確認: pid取自本瀏覽器自身之CDP連線, 且本瀏覽器仍連線中(playwright於行程結束時才發disconnected, 行程仍在時作業系統不會將該pid配給他人; 已斷線則不殺, 避免pid被重用時誤殺他人行程)
+//pid可為數字或回傳數字之函數(結束當下才取值, 使關閉等待期間才查得之pid仍可用)
+let killBrowser = async (browser, pidOrFun, trace) => {
+    let result = ''
+    let pid = isfun(pidOrFun) ? pidOrFun() : pidOrFun
+    let connected = isConnected(browser)
+    if (!isPid(pid)) {
+        result = 'no-pid'
+    }
+    else if (connected === false) {
+        result = 'gone'
+    }
+    else if (connected === null) {
+        result = 'unverified'
+    }
+    else {
+        let ok = await raceLimit(execProcessKillPid(pid).then(() => true, () => false), timeProbe, false)
+        if (ok) {
+            result = (await waitDisconnected(browser)) ? 'killed' : 'unconfirmed'
+        }
+        else {
+            result = isConnected(browser) === false ? 'gone' : 'failed'
+        }
+    }
+    if (trace) {
+        trace('browser-kill', { result, pid: isPid(pid) ? pid : null })
+    }
+    return result
+}
+
+
+//closeBrowser, 限時關閉瀏覽器: timeClose內未關閉(主程序卡死)則經killBrowser強制結束; 回傳'closed'或killBrowser之結果字串
+//browser.close()成功或(拋錯但已斷線)視為已關閉; 拋錯而仍連線者不是已關閉, 立即走killBrowser
+let closeBrowser = async (browser, pid, trace) => {
+    if (trace) {
+        trace('browser-close-start', {})
+    }
+    let closed = await raceLimit(
+        Promise.resolve().then(() => browser.close()).then(() => true, () => isConnected(browser) === false),
+        timeClose,
+        false,
+    )
+    if (trace) {
+        trace('browser-close', { closed })
+    }
+    if (closed) {
+        return 'closed'
+    }
+    return killBrowser(browser, pid, trace)
+}
+
+
+//ensurePid, 取得世代之瀏覽器主程序pid(取得後每世代共用), 回傳pid或null; 取不到時不永久快取, 下一個給timeout之呼叫再試一次(每世代最多2次, 免瀏覽器持續無回應時每次呼叫都多等timeProbe)
+let ensurePid = (g, browser) => {
+    if (g.pmPid === undefined) {
+        g.pidTries++
+        g.pmPid = getBrowserPid(browser)
+            .then((pid) => {
+                g.pid = pid
+                if (pid === null &amp;&amp; g.pidTries &lt; 2) {
+                    g.pmPid = undefined
+                }
+                return pid
+            })
+    }
+    return g.pmPid
+}
+
+
 //getGen, 取得現行世代, 無則lazy啟動; 併發呼叫共用同一個launch Promise
 let getGen = (executablePath, modeHeadless) => {
 
@@ -180,9 +460,18 @@ let getGen = (executablePath, modeHeadless) => {
             id: ++genSeq,
             pmBrowser: null,
             ctxPms: {},
+            browser: undefined,
+            guarded: false,
+            pmPid: undefined,
+            pidTries: 0,
+            pid: undefined,
+            pmClose: undefined,
         }
         g.pmBrowser = chromium.launch(getLaunchOpt(executablePath, modeHeadless))
             .then((browser) => {
+
+                //browser
+                g.browser = browser
 
                 //disconnected, 瀏覽器意外死亡時, 若仍為現行世代則歸零, 使下次呼叫重新啟動
                 browser.on('disconnected', () => {
@@ -211,31 +500,61 @@ let getGen = (executablePath, modeHeadless) => {
 
 
 //closeGen, 關閉指定世代; 若其為現行世代先歸零, 使後續呼叫直接啟動新世代, 不會取得關閉中之瀏覽器
-let closeGen = async (g) => {
+//曾有呼叫給opt.timeout之世代(guarded)才限時關閉並可強制結束, 回傳'closed'或killBrowser之結果字串, 啟動中(尚無瀏覽器可關)回傳'pending'並於啟動完成後在背景關閉;
+//未曾給opt.timeout之世代維持原行為(不限時等待啟動與關閉), 回傳null
+let closeGen = async (g, trace = null) => {
     if (!g) {
-        return
+        return null
     }
     if (gen === g) {
         gen = null
     }
-    await g.pmBrowser
-        .then((browser) => {
-            return browser.close()
-        })
-        .catch(() => {})
+    if (g.guarded !== true) {
+        await g.pmBrowser
+            .then((browser) => {
+                return browser.close()
+            })
+            .catch(() => {})
+        return null
+    }
+    if (g.pmClose === undefined) {
+        if (g.browser === undefined) {
+
+            //尚在啟動: 不等待啟動完成(啟動期間無從取得pid), 完成後取pid再於背景關閉(背景之處置經trace通知, 可能在呼叫已返回之後)
+            g.pmClose = g.pmBrowser
+                .then(async (browser) => {
+                    await ensurePid(g, browser)
+                    return closeBrowser(browser, () => g.pid, trace)
+                })
+                .catch(() => 'failed')
+            return 'pending'
+        }
+
+        //同一世代之關閉(各呼叫之逾時處置、重試前自癒、close()、閒置關閉)共用同一次處置, 不重複關閉或結束
+        g.pmClose = closeBrowser(g.browser, () => g.pid, trace)
+    }
+    else if (g.browser === undefined) {
+        return 'pending'
+    }
+    return g.pmClose
 }
 
 
-//getContext, 取得指定deviceScaleFactor之常駐context, playwright之deviceScaleFactor為context層級故依scale分快取; 快取綁定世代, 等待啟動期間世代已被關閉則拋錯
-let getContext = async (executablePath, modeHeadless, scale) => {
-
-    //g
-    let g = getGen(executablePath, modeHeadless)
+//getContext, 取得指定deviceScaleFactor之常駐context, playwright之deviceScaleFactor為context層級故依scale分快取; 快取綁定世代, 等待啟動期間世代已被關閉則拋錯; guard為true時另取瀏覽器主程序pid
+let getContext = async (g, scale, guard) => {
 
     //browser
     let browser = await g.pmBrowser
     if (gen !== g) {
         throw new Error('resident browser has been closed')
+    }
+
+    //pid, 給了opt.timeout之呼叫才取(經CDP, 每世代共用), 供逾時卡死時確認歸屬後強制結束
+    if (guard) {
+        await ensurePid(g, browser)
+        if (gen !== g) {
+            throw new Error('resident browser has been closed')
+        }
     }
 
     //key
@@ -307,16 +626,24 @@ let aliveStrategy = {
     isAborted: (st) => {
         return st.epoch !== closeEpoch
     },
-    acquire: async ({ executablePath, modeHeadless, scale }) => {
-        let { context, g } = await getContext(executablePath, modeHeadless, scale)
+    acquire: async ({ executablePath, modeHeadless, scale, guard, onToken }) => {
+
+        //g, 先同步取得本呼叫所等待之世代並回報, 使逾時時關閉的是本呼叫所用者, 而非當下之現行世代
+        let g = getGen(executablePath, modeHeadless)
+        onToken(g)
+        if (guard) {
+            g.guarded = true
+        }
+
+        let { context } = await getContext(g, scale, guard)
         return {
             context,
             release: null, //常駐不釋放, 瀏覽器交由閒置計時器或WHtml2png.close()關閉
             token: g,
         }
     },
-    heal: async (token) => {
-        await closeGen(token)
+    heal: async (token, trace) => {
+        return closeGen(token, trace)
     },
 }
 
@@ -329,10 +656,34 @@ let singleStrategy = {
     isAborted: () => {
         return false
     },
-    acquire: async ({ executablePath, modeHeadless, scale }) => {
+    acquire: async ({ executablePath, modeHeadless, scale, guard, trace, onRelease }) => {
 
         //browser
         let browser = await chromium.launch(getLaunchOpt(executablePath, modeHeadless))
+
+        //pid, 給了opt.timeout之呼叫才取(經CDP), 供逾時卡死時確認歸屬後強制結束; 結束當下才取值(取pid期間逾時亦可用)
+        let pid = null
+
+        //pmRelease, 釋放只執行一次: 逾時處置與出圖流程收尾可能各自呼叫, 共用同一次關閉; 給了opt.timeout者以closeBrowser限時關閉
+        let pmRelease = null
+        let release = () => {
+            if (pmRelease === null) {
+                if (guard) {
+                    pmRelease = closeBrowser(browser, () => pid, trace)
+                }
+                else {
+                    pmRelease = browser.close()
+                }
+            }
+            return pmRelease
+        }
+
+        //onRelease, 啟動完成即回報釋放函數, 使其後取pid或建立context卡住而逾時時, 逾時處置仍能關閉本瀏覽器
+        onRelease(release)
+
+        if (guard) {
+            pid = await getBrowserPid(browser)
+        }
 
         //context
         let context = null
@@ -341,20 +692,20 @@ let singleStrategy = {
         }
         catch (err) {
             //建立context失敗須關閉已啟動之瀏覽器避免洩漏
-            await browser.close()
+            await release()
                 .catch(() => {})
             throw err
         }
 
         return {
             context,
-            release: async () => {
-                await browser.close()
-            },
+            release,
             token: null,
         }
     },
-    heal: async () => {},
+    heal: async () => {
+        return null
+    },
 }
 
 
@@ -485,6 +836,27 @@ async function core(width, height, scale, html, opt, strategy) {
     }
     retry = cint(retry)
 
+    //timeout, 單次出圖(每次嘗試)之允許時長(ms), 未給或非預期之輸入(非有效正數、超過計時器上限2147483647、讀取拋錯)視為未給, 不限時(null)
+    let timeout = null
+    try {
+        let v = get(opt, 'timeout')
+        if (isenum(v, { use: 'positive', max: 2147483647 })) {
+            timeout = Math.ceil(Number(v)) //有效數字字串轉為數值後使用; 計時器以整數毫秒為粒度(Node截斷小數), 向上取整使不早於所給時長
+        }
+    }
+    catch (err) {
+        timeout = null
+    }
+
+    //trace, 觀察回調(opt.onTrace), 未給時為null; 回調屬觀察用途, 不得改變本函數既有行為
+    let trace = null
+    try {
+        trace = getTrace(opt)
+    }
+    catch (err) {
+        trace = null
+    }
+
     //writeError
     let writeError = get(opt, 'writeError')
     if (!isbol(writeError)) {
@@ -530,14 +902,66 @@ async function core(width, height, scale, html, opt, strategy) {
         }
     }
 
+    //removeHtml, 刪除funGetUrl場景之html暫存檔(只刪自建者), 失敗時依writeError寫錯誤檔, 不拋錯
+    let removeHtml = (fpHtml, id) => {
+        try {
+            if (isFile(fpHtml)) {
+                fs.unlinkSync(fpHtml)
+            }
+        }
+        catch (err) {
+            if (writeError) {
+                writeErrFile(`err_${id}_fpHtml.json`, `can not delete html[whweb_${id}.html]: ${errToMsg(err)}`)
+            }
+        }
+    }
+
+    //newProgress, 建立一次嘗試之進度紀錄: step為進行中之步驟(逾時時據以回報卡在哪一步), page/token/release為已取得者, useBrowser為已開始取用瀏覽器, cancelled為已被逾時處置放棄(其進行中之步驟自行收尾)
+    let newProgress = () => {
+        return {
+            attempt: 0,
+            step: 'start',
+            page: null,
+            token: null,
+            release: null,
+            fpHtml: null,
+            useBrowser: false,
+            cancelled: false,
+        }
+    }
+
+    //setStep, 記錄進行中之步驟
+    let setStep = (c, step) => {
+        c.step = step
+        if (trace) {
+            trace('step', { attempt: c.attempt, step })
+        }
+    }
+
+    //checkCancelled, 已被逾時處置放棄之嘗試不再往下操作頁面(拋錯由exec之fun(page)攔截)
+    let checkCancelled = (c) => {
+        if (c.cancelled) {
+            if (trace) {
+                trace('cancelled', { attempt: c.attempt, step: c.step })
+            }
+            throw new Error('cancelled by timeout')
+        }
+    }
+
     //exec, 執行一次出圖, 回傳結果物件{ state, message, b64, needHeal, token }, 不拋錯
-    let exec = async() => {
+    let exec = async(c) => {
 
         //iCore
         iCore++
 
         //id
         let id = `${idpm}-${iCore}`
+
+        //attempt
+        c.attempt = iCore
+        if (trace) {
+            trace('attempt', { attempt: c.attempt, timeout })
+        }
 
         let earrs = []
         let b64 = ''
@@ -561,10 +985,12 @@ async function core(width, height, scale, html, opt, strategy) {
 
                 //writeFileSync
                 try {
+                    setStep(c, 'write html file for funGetUrl')
                     fs.mkdirSync(fdHtml, { recursive: true })
                     let fp = path.resolve(fdHtml, `whweb_${id}.html`)
                     fs.writeFileSync(fp, g, { encoding: 'utf8', flag: 'wx' }) //排他建立, 不覆寫既有檔案
                     fpHtml = fp
+                    c.fpHtml = fp
                 }
                 catch (err) {
                     earrs.push({
@@ -576,6 +1002,7 @@ async function core(width, height, scale, html, opt, strategy) {
                 //funGetUrl
                 if (size(earrs) === 0) {
                     try {
+                        setStep(c, 'funGetUrl')
                         url = funGetUrl(fpHtml)
                         if (ispm(url)) {
                             url = await url
@@ -603,12 +1030,57 @@ async function core(width, height, scale, html, opt, strategy) {
                         err: 'aborted by WHtml2png.close()',
                     })
                 }
+                else if (c.cancelled) {
+
+                    //cancelled, 等待funGetUrl期間已逾時被放棄, 不再取得瀏覽器
+                    earrs.push({
+                        anchor: 'funGetUrl(fpHtml)',
+                        err: 'cancelled by timeout',
+                    })
+                    if (trace) {
+                        trace('cancelled', { attempt: c.attempt, step: 'funGetUrl' })
+                    }
+
+                }
                 else {
                     try {
-                        let ac = await strategy.acquire({ executablePath, modeHeadless, scale })
+                        setStep(c, 'strategy.acquire')
+                        c.useBrowser = true
+                        let ac = await strategy.acquire({
+                            executablePath,
+                            modeHeadless,
+                            scale,
+                            guard: timeout !== null,
+                            trace,
+                            onToken: (t) => {
+                                c.token = t
+                            },
+                            onRelease: (f) => {
+                                c.release = f
+
+                                //已逾時被放棄(逾時處置時瀏覽器尚在啟動, 無釋放函數可用)者, 瀏覽器一啟動完成即釋放, 不論其後取pid或建context是否卡住
+                                if (c.cancelled) {
+                                    f().catch(() => {})
+                                }
+                            },
+                        })
                         context = ac.context
                         release = ac.release
                         token = ac.token
+                        c.release = release
+                        c.token = token
+
+                        //cancelled, 取得期間已逾時被放棄, 取得之瀏覽器不再使用, 立即釋放(alive之世代已由逾時處置關閉)
+                        if (c.cancelled) {
+                            context = null
+                            earrs.push({
+                                anchor: 'strategy.acquire',
+                                err: 'cancelled by timeout',
+                            })
+                            if (trace) {
+                                trace('cancelled', { attempt: c.attempt, step: 'strategy.acquire' })
+                            }
+                        }
                     }
                     catch (err) {
                         if (err &amp;&amp; err.whGen) {
@@ -626,8 +1098,26 @@ async function core(width, height, scale, html, opt, strategy) {
                 let page = null
                 if (context !== null) {
                     try {
+                        setStep(c, 'context.newPage()')
                         page = await context.newPage()
-                        page.setDefaultNavigationTimeout(60 * 1000) //延長timeout
+
+                        //cancelled, 開頁期間已逾時被放棄, 不再出圖, 關閉該頁面(不等待, 免被已卡住之瀏覽器拖住收尾)
+                        if (c.cancelled) {
+                            page.close()
+                                .catch(() => {})
+                            page = null
+                            earrs.push({
+                                anchor: 'context.newPage()',
+                                err: 'cancelled by timeout',
+                            })
+                            if (trace) {
+                                trace('cancelled', { attempt: c.attempt, step: 'context.newPage()' })
+                            }
+                        }
+                        else {
+                            c.page = page
+                            page.setDefaultNavigationTimeout(60 * 1000) //延長timeout
+                        }
                     }
                     catch (err) {
                         needHeal = true //無法開頁屬瀏覽器層錯誤
@@ -649,31 +1139,49 @@ async function core(width, height, scale, html, opt, strategy) {
                         })
                     }
 
+                    //stPage, 追蹤load與網路活動, 須於載入前掛上
+                    let stPage = trackPage(page)
+
                     try {
 
                         //setViewportSize, deviceScaleFactor已由context給定
+                        setStep(c, 'page.setViewportSize()')
                         await page.setViewportSize({
                             width: Number(width),
                             height: Number(height),
                         })
+                        checkCancelled(c)
 
                         //show page, networkidle代表500ms內無網路連線, 對應puppeteer之networkidle系列
                         if (url !== null) {
+                            setStep(c, 'page.goto()')
                             await page.goto(url, {
                                 waitUntil: 'networkidle',
                                 timeout: 60 * 1000, //延長timeout
                             })
                         }
                         else {
+                            setStep(c, 'page.setContent()')
                             await page.setContent(g, {
                                 waitUntil: 'networkidle',
                                 timeout: 60 * 1000, //延長timeout
                             })
                         }
+                        checkCancelled(c)
+
+                        //waitPageSettled, networkidle可能早於頁尾腳本與load, 須等頁面確實完成才可檢查頁面錯誤或截圖
+                        setStep(c, 'waitPageSettled')
+                        let settled = await waitPageSettled(page, stPage)
+                        if (trace) {
+                            trace('page-settled', { attempt: c.attempt, result: settled })
+                        }
+                        checkCancelled(c)
 
                         //delay
                         if (isfun(funPageWait)) {
+                            setStep(c, 'funPageWait')
                             await page.waitForFunction(funPageWait, null, { polling: 200, timeout: 60 * 1000 }) //200ms偵測一次, 延長timeout
+                            checkCancelled(c)
                         }
 
                         //check pageerror, 截圖前有頁面端例外則視為失敗
@@ -684,6 +1192,7 @@ async function core(width, height, scale, html, opt, strategy) {
                         }
 
                         //screenshot, 直接取Buffer, 不落地png暫存檔
+                        setStep(c, 'page.screenshot()')
                         let buf = await page.screenshot({
                             timeout: 60 * 1000, //延長timeout
                         })
@@ -709,6 +1218,7 @@ async function core(width, height, scale, html, opt, strategy) {
 
                     //close
                     try {
+                        setStep(c, 'page.close()')
                         await page.close()
                     }
                     catch (err) {
@@ -731,6 +1241,7 @@ async function core(width, height, scale, html, opt, strategy) {
                 //release, single模式關閉本次啟動之瀏覽器, alive模式為null不釋放
                 if (isfun(release)) {
                     try {
+                        setStep(c, 'release()')
                         await release()
                     }
                     catch (err) {
@@ -753,16 +1264,7 @@ async function core(width, height, scale, html, opt, strategy) {
 
         //delete fpHtml
         if (fpHtml !== null) {
-            try {
-                if (isFile(fpHtml)) {
-                    fs.unlinkSync(fpHtml)
-                }
-            }
-            catch (err) {
-                if (writeError) {
-                    writeErrFile(`err_${id}_fpHtml.json`, `can not delete html[whweb_${id}.html]: ${errToMsg(err)}`)
-                }
-            }
+            removeHtml(fpHtml, id)
         }
 
         //check
@@ -774,8 +1276,8 @@ async function core(width, height, scale, html, opt, strategy) {
                 cearrs += `${errToMsg(earr.err)} in ${earr.anchor}\n`
             })
 
-            //writeErrFile, 寫檔失敗時附記於訊息, 不覆蓋原錯誤
-            if (writeError) {
+            //writeErrFile, 寫檔失敗時附記於訊息, 不覆蓋原錯誤; 已被逾時處置放棄者, 錯誤檔由逾時處置寫入(同檔名), 此處不覆蓋
+            if (writeError &amp;&amp; !c.cancelled) {
                 let e = writeErrFile(`err_${id}_all.json`, cearrs)
                 if (e !== '') {
                     cearrs += `can not write error file: ${e}\n`
@@ -806,13 +1308,117 @@ async function core(width, height, scale, html, opt, strategy) {
         }
     }
 
+    //notes, 逾時處置之瀏覽器處置結果對應之訊息(括號內), 未列者(含頁面層之'closed')不附註
+    let notes = {
+        'killed': 'browser force-killed',
+        'no-pid': 'browser not killed, pid unknown',
+        'unverified': 'browser not killed, connection state unknown',
+        'failed': 'browser kill failed',
+        'unconfirmed': 'browser kill not confirmed',
+        'pending': 'browser will be closed after launch',
+    }
+
+    //execLimited, 限制一次出圖(每次嘗試)之允許時長(opt.timeout); 未給即直接執行exec, 流程與未支援前相同
+    //逾時不等exec結束(其進行中之步驟於頁面或瀏覽器關閉後自行收尾, c.cancelled使其不再往下取用瀏覽器), 依卡住之層級處置, 無論是否再重試皆於此完成:
+    //已開頁面且timeProbe內關得掉: 頁面層問題, 瀏覽器仍可回應, 不重啟(不牽連並發呼叫, 符合R12);
+    //尚無頁面(取得瀏覽器或開頁卡住)或頁面關不掉: 瀏覽器層問題, 關閉本呼叫所用之瀏覽器(alive為本呼叫所用世代, 下次呼叫即啟動新世代; single為本呼叫專屬之瀏覽器), 主程序卡死時timeClose後確認歸屬再樹狀強制結束;
+    //尚未取用瀏覽器(如funGetUrl卡住)之逾時不動瀏覽器
+    let execLimited = async (c) => {
+
+        //check
+        if (timeout === null) {
+            return exec(c)
+        }
+
+        //race
+        let r = await raceLimit(() => exec(c), timeout, null)
+        if (r !== null) {
+            return r
+        }
+
+        //cancelled
+        c.cancelled = true
+        let step = c.step
+        if (trace) {
+            trace('timeout', { attempt: c.attempt, step, timeout })
+        }
+
+        //pageClosed, 關得掉頁面代表瀏覽器仍可回應, 屬頁面層問題
+        let pageClosed = false
+        if (c.page !== null) {
+            if (trace) {
+                trace('page-close-start', { attempt: c.attempt })
+            }
+            pageClosed = await raceLimit(
+                Promise.resolve().then(() => c.page.close()).then(() => true, () => false),
+                timeProbe,
+                false,
+            )
+            if (trace) {
+                trace('page-close', { attempt: c.attempt, closed: pageClosed })
+            }
+        }
+
+        //browserLevel
+        let browserLevel = c.useBrowser &amp;&amp; !pageClosed
+
+        //release, single模式為本呼叫專屬之瀏覽器, 不論層級皆釋放(與exec收尾共用同一次關閉)
+        let outcome = null
+        if (isfun(c.release)) {
+            outcome = await Promise.resolve().then(() => c.release()).catch(() => 'failed')
+        }
+
+        //heal, alive模式之瀏覽器層問題關閉本呼叫所用之世代
+        if (browserLevel &amp;&amp; c.token !== null) {
+            let o = await strategy.heal(c.token, trace)
+            if (o !== null) {
+                outcome = o
+            }
+        }
+
+        //delete fpHtml, funGetUrl卡住時exec可能永不結束, 暫存檔由此刪除
+        if (c.fpHtml !== null) {
+            removeHtml(c.fpHtml, `${idpm}-${c.attempt}`)
+        }
+
+        //message
+        let message = `timeout[${timeout}ms] in ${step}`
+        let note = notes[outcome]
+        if (!isestr(note) &amp;&amp; browserLevel) {
+            if (outcome === 'closed') {
+                note = 'browser closed'
+            }
+            else if (outcome === 'gone') {
+                note = 'browser disconnected'
+            }
+        }
+        if (isestr(note)) {
+            message += ` (${note})`
+        }
+
+        //writeErrFile
+        if (writeError) {
+            let e = writeErrFile(`err_${idpm}-${c.attempt}_all.json`, `${message}\n`)
+            if (e !== '') {
+                message += `\ncan not write error file: ${e}`
+            }
+        }
+
+        return {
+            state: 'error',
+            message,
+            needHeal: false, //已於上處置
+            token: null,
+        }
+    }
+
     //proc, 失敗時重試
     let errTemp = null
     let b64 = ''
     while (true) {
 
         //exec
-        let r = await exec()
+        let r = await execLimited(newProgress())
             .catch((err) => {
                 //exec已全攔截, 預期不會來到此處, 仍保守轉為錯誤結果
                 return {
@@ -837,10 +1443,13 @@ async function core(width, height, scale, html, opt, strategy) {
 
         //自癒, 只有瀏覽器層錯誤才關閉本呼叫所用之世代(alive), 其他並發呼叫之瀏覽器不受頁面層錯誤影響
         if (r.needHeal) {
-            await strategy.heal(r.token)
+            await strategy.heal(r.token, trace)
         }
 
         //延遲再重試
+        if (trace) {
+            trace('retry', { attempt: iCore, wait: 5000 })
+        }
         await delay(5000)
 
     }
@@ -895,6 +1504,9 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * stylesHead與scriptsHead之網址置於屬性內, 不得含雙引號;
  * 未給opt.funGetUrl時以setContent載入(about:blank), html內之本機檔案(file://)與相對路徑資源不會載入, 請改用data url或給opt.funGetUrl
  *
+ * 載入後一律等待頁面確實完成才檢查頁面錯誤、執行opt.funPageWait與截圖: 先等load(同步腳本與load事件處理皆已執行), 再等靜止窗(自load與最後一次網路活動起500毫秒內無請求且進行中之請求皆已結束, 以頁面自身之計時器等待, 故load前所設且延遲不超過500毫秒之計時器必已執行); 窗外之非同步工作請用opt.funPageWait等待;
+ * 等待上限60秒, 未達成不視為失敗而續往下
+ *
  * @class
  * @param {Number} [width=700] 輸入圖片原始寬度數字，單位px，預設700
  * @param {Number} [height=400] 輸入圖片原始高度數字，單位px，預設400
@@ -912,6 +1524,8 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * @param {Function} [opt.funPageWait=null] 輸入前端瀏覽器內偵測等待完成之函數，可用window或document等，回傳true則代表渲染完成可進行截圖，逾時60秒，預設null
  * @param {Boolean} [opt.rejectOnPageError=false] 輸入頁面端發生未捕捉之例外(含未處理之Promise rejection)時是否視為失敗(依retry重試後reject，訊息含頁面錯誤)，預設false(維持出圖)
  * @param {Integer} [opt.retry=3] 輸入總嘗試次數整數(含第一次)，每次失敗後等待5秒再試，預設3
+ * @param {Number} [opt.timeout=null] 輸入單次出圖(每次嘗試)之允許時長毫秒數，有效正數(數字或數字字串)且不超過2147483647，預設null；超過視為該次失敗並依retry重試，訊息開頭為`timeout[Nms] in 步驟`(步驟如waitPageSettled、funPageWait、context.newPage()、page.goto())，可據以判斷卡在哪一步。逾時後先限時5秒關閉該頁面：關得掉代表瀏覽器仍可回應，屬頁面層問題，不重啟瀏覽器，不牽連並發呼叫；尚無頁面(取得瀏覽器或開頁卡住)或關不掉屬瀏覽器層問題，關閉本呼叫所用之瀏覽器(alive為本呼叫所用之常駐瀏覽器，不論是否再重試，下次呼叫即啟動新瀏覽器；其他使用同一常駐瀏覽器之並發呼叫會失敗，由各自之retry接住)，關閉限時10秒，超過則確認該pid仍為本實例啟動之瀏覽器後樹狀強制結束(pid於啟動時經CDP取得，無法確認者不結束並於訊息註明)；funGetUrl卡住等尚未取用瀏覽器之逾時不動瀏覽器。每次嘗試最長約timeout加25秒(5秒關頁面、10秒關閉瀏覽器、5秒結束指令、5秒確認斷線)，整次呼叫最長約此值乘retry再加5秒乘(retry-1)；計時不含取得套件自帶chrome(ensureBins有其自身逾時)與重試前之等待。小數毫秒向上取整。未給或非預期之輸入(非有效正數、超過2147483647、非數字、讀取拋錯)視為未給，不限時，流程與未支援前相同。給了此選項之呼叫所用之常駐瀏覽器，其WHtml2png.close()與閒置自動關閉亦限時並可強制結束(其處置結果不回傳亦不通知)
+ * @param {Function} [opt.onTrace=null] 輸入觀察回調函數，格式為(e)=>{}，e為凍結之事件物件{ type, ... }，於內部事件發生當下同步呼叫(供測試與診斷以事件而非等待時間同步)，其拋錯與回傳值皆忽略，預設null；type為'attempt'(開始一次嘗試，含attempt、timeout)、'step'(進入步驟，含attempt、step)、'page-settled'(載入後等待頁面完成之結果，含attempt、result為'settled'已靜止、'no-load'限時內未load或頁面已關閉、'busy'限時內未能靜止、'no-timer'頁面計時器未回應或'error'頁面內等待反覆失敗；後四者不視為失敗，續往下檢查與截圖)、'timeout'(該次嘗試逾時，含attempt、step、timeout)、'page-close-start'(逾時後開始限時關閉頁面，含attempt)、'page-close'(逾時後關閉頁面之結果，含attempt、closed)、'browser-close-start'(開始限時關閉瀏覽器)、'browser-close'(限時關閉瀏覽器之結果，含closed)、'browser-kill'(強制結束之處置，含result為'killed'、'gone'、'no-pid'、'unverified'、'failed'或'unconfirmed'，及pid)、'cancelled'(已逾時之嘗試於其進行中之步驟成功返回後被放棄，含attempt、step；以錯誤返回者不通知；此事件與逾時之嘗試其後的'step'可能在呼叫已reject之後才通知)、'retry'(失敗後即將等待再試，含attempt、wait)；'browser-kill'的result為'gone'時代表與瀏覽器之連線已斷而未結束行程，單次出圖成功後釋放瀏覽器失敗(如pid不明)不影響回傳圖片，僅經此事件可見
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
  * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串(相對於當前工作路徑)，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'
  * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串(相對於當前工作路徑)，預設'./_convertTemp'
@@ -1008,7 +1622,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 13:00:19 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 21:32:05 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
