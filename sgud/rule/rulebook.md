@@ -95,7 +95,7 @@
 - 改動範圍 → 測試:本套件無 `e2e-` 檔;全套 `npm test` 約 30 秒(暖)~40 秒(冷,首次解出),每輪跑全套。
 
 ### R17 單次出圖之允許時長 `opt.timeout`:未給即與現行完全相同;瀏覽器卡死時限時處置,強制結束須確認歸屬(2026-11-03 h2p60,Gitea #60)
-- 來源:Gitea #60(liqproc):以真 chrome 暫停行程實測,`context.newPage()`、`page.close()`、`browser.close()` 無時限,卡住時 `opt.retry` 不起作用,呼叫端無從判斷。
+- 來源:Gitea #60(使用端):以真 chrome 暫停行程實測,`context.newPage()`、`page.close()`、`browser.close()` 無時限,卡住時 `opt.retry` 不起作用,呼叫端無從判斷。
 - 規則:
   1. **輸入**:`opt.timeout` 以 wsemi `isenum(v, { use: 'positive', max: 2147483647 })` 判定,有效(數字或數字字串)取 `Number(v)`,其餘(含超過計時器上限)一律視為未給(null,不限時)——dspec〈輸入參數之檢測機制〉K3、N2 範圍子型。未實作 `opt.debug`(該規格草案;本函數其他 opt 鍵亦無)。
   2. **未給時不變(P3)**:`timeout === null` 時 `execLimited` 直接 `exec`;不取 pid(不查 CDP)、不建 `raceLimit` 計時器、`WHtml2png.close()` 與閒置關閉對未曾給過 `timeout` 之世代維持不限時 `await browser.close()`(`closeGen` 之 `g.guarded !== true` 分支);single 之 `release` 為單次 `browser.close()`。
