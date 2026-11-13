@@ -2,6 +2,7 @@ import './tools/fetchBlock.mjs'
 import assert from 'assert'
 import { createRequire } from 'module'
 import fs from 'fs'
+import wpw from 'w-playwright'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { resolveLibFile } from '../src/libRoutes.mjs'
 import { decodePng, classifyCenter } from './tools/png.mjs'
@@ -33,11 +34,10 @@ describe('unit-cdnLibs', function() {
 
     //離線(context.setOffline)時模板之函式庫仍可用: 證明由本機供應而非CDN
     it('offline context: template libraries are still served locally', async function() {
-        let { chromium } = await import('playwright-core')
         let { default: routeLibs } = await import('../src/libRoutes.mjs')
         let { default: buildHtml } = await import('../src/buildHtml.mjs')
         let fpExe = await getChromeExe()
-        let browser = await chromium.launch({ executablePath: fpExe, headless: true, args: ['--no-sandbox', '--disable-gpu'] })
+        let browser = await wpw.launchChromium({ executablePath: fpExe, headless: true, args: ['--no-sandbox', '--disable-gpu'] }) //一律經w-playwright啟動(守門參數)
         try {
             let ctx = await browser.newContext()
             await routeLibs(ctx)

@@ -19,7 +19,7 @@
 - 套件根之推導只在 `src/pkgRoot.mjs`(單一擁有者),`ensureBins.mjs`(清單與預設快取之基準)與函式庫供應(`libRoutes.mjs`)共用。
 - 頂層不得宣告 `__filename`/`__dirname`(R4)。
 - 盤點:Grep `path\.resolve\(\s*['"]|process\.cwd\(` 於 `src/` 須 0 筆;Grep `W_HTML2PNG_|chrome/portable|autoDownloadFiles|@deprecated` 於 `src/` 須 0 筆。`WHtml2png.mjs` 之 fdHtml/fdErr 預設 `./_convertTemp`(使用者工作輸出,場景 A)為刻意。
-- 測試:`test/api-ensureBins.test.mjs`(describe〈WHtml2png gets chrome through ensureBins〉:攔截全域 fetch 與 `chromium.launch`,斷言未給 executablePath 時所啟動者為組內 chrome.exe、給了則不取組、取不到時之字串)、`test/unit-binManifest.test.mjs`(src 不含舊位置／舊環境變數／自寫下載)。
+- 測試:`test/api-ensureBins.test.mjs`(describe〈WHtml2png gets chrome through ensureBins〉:攔截全域 fetch,並以 w-playwright 之 `setBrowserTypeForTest` 包裝其 BrowserType〔記錄後 `next()` 真啟動,R19〕,斷言未給 executablePath 時所啟動者為組內 chrome.exe、給了則不取組、取不到時之字串)、`test/unit-binManifest.test.mjs`(src 不含舊位置／舊環境變數／自寫下載)。
 
 ### R3 首次下載跨行程安全(2026-10-29 廢止)
 - 自寫之鎖檔、隔離夾、完成標記、負快取已隨 `src/downloadFiles.mjs`、`src/fileLock.mjs` 移除;下載、校驗、併發與跨行程安全由 wsemi `fsEnsureBins`(暫存夾＋逐檔校驗＋整組原子更名)負責,見 R16。舊規則全文見 git 歷史(提交 bf41fac 之本檔)。
@@ -46,7 +46,7 @@
 
 ### R8 建置
 - `toolg/` 之發布與建置腳本(`gDistRollup.mjs`、`cleanFolder.mjs` 等)依 `C:\opensrcOper\dspec\自有套件之發布與建置腳本.md`,本套件不另立寫法(2026-11-02 起;原「以腳本位置推導 `src`/`dist`」已依該文件撤,改回 `'./src'`、`'./dist'`)。
-- `toolg/gDistRollup.mjs` 之選項:`runin:'nodejs'`;external/globals 涵蓋所有用到之 Node 內建模組與 `playwright-core`(含 wsemi `fsEnsureBins` 所需之 `url`、`crypto`、`stream`、`stream/promises`、`child_process`、`os`);失敗時印出並 `process.exitCode = 1`(不得只 `console.log`)。
+- `toolg/gDistRollup.mjs` 之選項:`runin:'nodejs'`;external/globals 涵蓋所有用到之 Node 內建模組與 `w-playwright`(2026-11-13 起取代 `playwright-core`,R19;不打包進 dist)(含 wsemi `fsEnsureBins` 所需之 `url`、`crypto`、`stream`、`stream/promises`、`child_process`、`os`);失敗時印出並 `process.exitCode = 1`(不得只 `console.log`)。
 - 盤點:Grep `catch` 於 `toolg/gDistRollup.mjs`。
 - 測試:`test/unit-dist.test.mjs`(依 dspec 規則 4:把 `src/`、`toolg/gDistRollup.mjs`、`package.json` 複製到 `test/_tmp/dist/<名>/`,以 `spawn` 指定 cwd 執行 toolg 腳本;離開碼 0、0 筆 could not be resolved、無 invalid runin、產物存在、外部模組 ⊆ Node 內建 ∪ dependencies、可載入並匯出 `close`;語法錯 → 離開碼 1)。`test/unit-binManifest.test.mjs` 另以文字檢查 `globals` 與 `external` 同一份且涵蓋上列模組。
 
@@ -112,7 +112,7 @@
   - Grep `getBrowserPid\(` 於 `src/`:`ensurePid`(alive,guarded 才呼叫)與 single `acquire`(`guard` 才呼叫)。
 - 已知限制:①歸屬確認依「pid 出自本瀏覽器自身 CDP 連線 + 仍連線」,不另以作業系統查詢父行程/建立時間(Windows 上行程仍在時 pid 不會被重用;playwright 於行程結束時才發 `disconnected`,結束到事件到達及 `taskkill` 啟動間之極短窗口無從排除;Node 無法持有行程控制代碼,Job Object 須原生整合,不採);②alive 世代若在任何給 `timeout` 之呼叫碰到它之前就卡死,pid 未取得而不殺(`no-pid`);③逾時前啟動中之 Chrome 於啟動完成後才關閉(背景),啟動本身(playwright 內 60 秒 launch 時限)不被中斷;④頁面層判定為「關得掉頁面」,renderer 全被暫停時頁面仍可能關得掉,下一次嘗試才在 `context.newPage()` 卡住而重啟瀏覽器(故救回同一張圖需 `retry` ≥ 3,預設值足夠);⑤依 issue 設計,尚無頁面(啟動/開頁/建 context)逾時即關閉本呼叫所用瀏覽器,`timeout` 過短(小於最壞啟動與開頁時間)會牽連 alive 並發呼叫,JSDoc/README 已寫明;⑥計時不含 `ensureBins`(其有自身逾時)與重試前等待;⑦單次出圖成功後釋放失敗(pid 不明等)僅經該次呼叫之 `onTrace` 可見;`WHtml2png.close()`/閒置關閉之處置結果不回傳亦不通知;結束指令限時 `timeProbe` 只停止等待,不取消已啟動之 `taskkill`;同步阻塞之 JS(如同步耗時之 `funGetUrl`)不可中斷,逾時以其返回後為準;⑧被放棄之嘗試其後的 `step`/`cancelled` 事件可能在呼叫已 reject 之後才通知。
 - 測試:`test/unit-timeoutFake.test.mjs`(71 案;假瀏覽器 `test/tools/fakeChromium.mjs`:輸入檢測 33 格〔有效 7、非預期 25、getter 拋錯 1〕、門檻與重試以 `node:test` 假時鐘、頁面層/瀏覽器層/強制結束/pid 不明/已斷線不殺/啟動中/取消/funGetUrl/`close()` 限時與不限時/共用關閉/pid 延遲取值與重試/`onTrace` 五種回調案;主程序 pid 為測試啟動之真實空轉行程,以其 exit 事件驗證真的被結束或未被結束)、`test/unit-timeout.test.mjs`(8 案;真 chrome:alive/single 逾時訊息、並發不牽連〔以本機 `/ready` 事件放行〕、重試、非預期輸入出圖、時限內完成、啟動中逾時收尾)。暫停真 chrome 行程(renderer/主程序)須作業系統層暫停(Node 無跨平台 API),不入套件測試,實測證據見報告。
-- 測試寫法要點:假時鐘於整檔只啟用一次(Node `mock.timers.reset()` 清空佇列時不重設計時器之佇列位置,前案被放棄之嘗試其後才執行的 `clearTimeout(舊計時器)` 會依殘留位置移除新佇列中他人之計時器,造成偶發懸置;查證見 `sgud/exp/experience.md`);須等「計時器已建立」時以 `page-close-start`/`browser-close-start` 事件同步,不以固定 flush 次數。
+- 測試寫法要點:假 BrowserType 經 w-playwright 之 `setBrowserTypeForTest` 安裝(R19),替身於 w-playwright 之非同步前置之後才被呼叫,依賴「啟動已發起」之時點者以 `env.waitLaunch(n)` 同步(2026-11-13);假時鐘於整檔只啟用一次(Node `mock.timers.reset()` 清空佇列時不重設計時器之佇列位置,前案被放棄之嘗試其後才執行的 `clearTimeout(舊計時器)` 會依殘留位置移除新佇列中他人之計時器,造成偶發懸置;查證見 `sgud/exp/experience.md`);須等「計時器已建立」時以 `page-close-start`/`browser-close-start` 事件同步,不以固定 flush 次數。
 - 改動範圍 → 測試:改 `WHtml2png.mjs` 之 `core`/逾時處置/世代 → 全套(本套件無 `e2e-` 檔,每輪全跑)。
 
 ### R18 頁面完成之判定:載入返回不代表頁面完成,檢查頁面錯誤與截圖前須等 `load` 與靜止窗(2026-11-03 h2p236)
@@ -129,6 +129,20 @@
 - 測試寫法:要重現本競態不必靠負載,`execJsHead` 同步阻塞 > 500ms 即可;假瀏覽器之 `cfg.load`/`cfg.settle`/`cfg.nav` 與 `page.emit`、`page.waitOrder` 控制順序。
 - 改動範圍 → 測試:改 `exec` 之載入至截圖段、`waitPageSettled`、`trackPage` → 全套。
 
+### R19 瀏覽器一律經 w-playwright 啟動;不直接依賴 playwright／playwright-core(2026-11-13 pm-h2p,排程第 442 項;w-playwright 帳本 R-PW-ONLY、R-PW-WIRING)
+- 來源:Windows 上 Chromium 153 起每啟動一個瀏覽器根行程即以錯誤密碼替目前使用者登入一次(10 分鐘 10 次鎖帳號);w-playwright 於每次啟動合併出恰一串 `--disable-features`(Playwright 預設＋`AutofillAiWalletPrivatePasses`＋呼叫端自給者)並統一 Playwright 版本(精確 1.64.1)。
+- 規則:
+  1. **唯一啟動點**:`src/WHtml2png.mjs` 之 `launchBrowser(executablePath, modeHeadless)` 呼叫 `wpw.launchChromium(getLaunchOpt(...))`;alive(`getGen`)與 single(`singleStrategy.acquire`)皆經此。`getLaunchOpt` 之參數(`--lang=en-US` 等 11 項、`headless`、`timeout: 60000`、`executablePath`)不變,守門之串由 w-playwright 加於其後。
+  2. **錯誤**:w-playwright 之失敗為帶 `code` 之固定詞彙 Error;本套件 reject 為字串(R6)會失去 `code`,故 `launchBrowser` 改為訊息 `[code] 說明`(同 R2 取不到自帶 chrome 之格式);不附 Playwright 原錯誤(w-playwright 錯誤契約)。
+  3. **依賴與建置**:`package.json` 之 `dependencies` 有 `w-playwright`(`^1.0.1`),各依賴類別皆無 `playwright`／`playwright-core`;`toolg/gDistRollup.mjs` 之 globals/external 為 `w-playwright`(R8)。使用端一律 `import wpw from 'w-playwright'`(主檔),不深層匯入其 `src/`。
+  4. **測試**:替換 BrowserType 一律用 `wpw.setBrowserTypeForTest`(不改寫 playwright 物件);以真啟動探測可用性者改 `wpw.findSystemChrome`(本套件現無);`test/` 內直接啟動瀏覽器者(`unit-cdnLibs`)改 `wpw.launchChromium`。
+- 站點全集與盤點(repo 根):
+  - R-PW-ONLY:`rg -n --glob '*.{mjs,js}' --glob '!**/node_modules/**' --glob '!**/dist/**' --glob '!tmp/**' "(from\s+|import\(\s*|require\(\s*)['\"\`]playwright(-core)?['\"\`/]" .` 須 0 筆;`rg -n --glob '**/package.json' --glob '!**/node_modules/**' --glob '!tmp/**' "\"playwright(-core)?\"\s*:" .` 須 0 筆;防空集合:同一正則對 `node_modules/w-playwright/src/_pw.mjs` 須命中(2026-11-13:2 筆)。`dist/` 依 w-playwright 帳本排除(repo 內 `dist/` 於發布時由現行 src 重產)。該帳本之正則不涵蓋副作用匯入(`import 'x'`)、`import`／`require` 與括號間之空白及跨行寫法,`test/unit-wpwLaunch.test.mjs` 另以補強之正則對本套件根之全部自有 `.mjs/.js/.cjs`(排除 `node_modules`、`dist`、`docs`、`bin-cache`、`tmp`、`test/_tmp`)整檔比對(外審 terra#2)。
+  - 啟動點:`rg -n "wpw\.(launchChromium|launchChromiumPersistent)\(" src` 只在 `launchBrowser`(1 處);Grep `launchBrowser\(` 於 `src/` 為定義＋2 呼叫(`getGen`、`singleStrategy.acquire`)。
+- 已知限制:①啟動失敗之訊息不再含 Playwright 原錯誤(執行檔路徑、呼叫紀錄),診斷須另以 w-playwright 之 `funLog`(本套件未開放;見報告待裁示);②`W_PLAYWRIGHT_LOGON_GUARD` 開啟時每次啟動多一次讀錯誤次數(約 0.1～1 秒),同行程之真瀏覽器啟動依序(single 之並發呼叫排隊);讀取與排隊不在 `getLaunchOpt` 之 60 秒啟動時限內,也不可取消——逾時或 `close()` 落在此期間時,處置同 R17 已知限制③(啟動完成後才關閉,不開頁),由 `opt.timeout` 限制呼叫端之等待(外審 terra#3、#4);③`PWDEBUG`(inspector)、`SELENIUM_REMOTE_URL` 有值時啟動即失敗(`[E_ENV]`);④依賴樹之 `playwright-core` 非 w-playwright 內附表之版本時拒絕啟動(`[E_PW_VERSION]`)。
+- 測試:`test/unit-wpwLaunch.test.mjs`(替身,不啟動瀏覽器:single/alive 各一案斷言替身被呼叫一次且選項含守門〔恰一串、為 args 最後一個、含預設清單與守門功能、`ignoreDefaultArgs` 去預設串、自身參數依原序不變、executablePath/headless/timeout〕、`modeHeadless:false`、啟動失敗之 `[E_LAUNCH]`、alive 並發共用一次啟動;子行程開登入守門且讀不到時 `[E_LOGON_GUARD]` 且替身 0 次;靜態:依賴、已安裝版本與 `tableMatch`、R-PW-ONLY 掃描、toolg external)、`test/api-ensureBins.test.mjs`(接縫不用替身:`next()` 真啟動自帶 chrome,single/alive 各斷言守門)、`test/unit-timeoutFake.test.mjs`(逾時落在 w-playwright 之啟動前置〔alive、single〕、`close()` 落在前置〔alive〕:登入守門開啟時斷言替身尚未被呼叫,其後啟動完成即關閉、不開頁、不重試)、`test/unit-dist.test.mjs`(dist 經 w-playwright:預載 `recordLaunch.mjs` 記錄所啟動之執行檔與守門)。變異(2026-11-13):single 改直接 playwright-core → 5 紅、alive 改直接 → 6 紅、去掉 `[code]` → 4 紅。
+- 改動範圍 → 測試:改 `launchBrowser`、`getLaunchOpt`、啟動點、`package.json` 依賴、`toolg/gDistRollup.mjs` → 全套(本套件無 `e2e-` 檔)。
+
 ## 已知限制
 
 - 未給 `funGetUrl` 時以 `setContent`(about:blank)載入,html 內本機 `file://` 與相對路徑資源不會載入(審計 p09 實測);須用 data URL 或給 `funGetUrl`。
@@ -140,6 +154,7 @@
 
 ## 破壞性/行為變更紀錄
 
+- (pm-h2p,2026-11-13)瀏覽器改經 w-playwright 啟動(R19):相依 `playwright-core` → `w-playwright`;啟動參數多一串 `--disable-features=<Playwright 預設>,AutofillAiWalletPrivatePasses`(取代 Playwright 自帶之一串);啟動失敗之訊息改為 `[code] 固定詞彙`(如 `[E_LAUNCH] browser launch failed`),不含 Playwright 原錯誤;`PWDEBUG`(inspector)、`SELENIUM_REMOTE_URL` 有值即啟動失敗;`W_PLAYWRIGHT_LOGON_GUARD=1` 時啟動前讀錯誤密碼次數。自帶 Chrome 138 之出圖與基準圖 base64 逐字相同。README〈瀏覽器之啟動(w-playwright)〉〈Breaking changes〉。
 - (h2p236,2026-11-03)載入後一律等 `load` 與靜止窗(R18):每次出圖約多 `load` 與最後一次請求結束之間的時間;負載下原本會漏判之頁面錯誤改為失敗、原本空白或未完成之圖改為完整;永不 `load` 之頁面最多多等 60 秒(仍出圖);步驟名新增 `waitPageSettled`、`onTrace` 新增 `page-settled`。靜態頁面之 PNG 位元組不變。
 
 - (實作 run03,2026-10-16)見 `C:\opensrcOper\dnow\20261014075905\agent-out\run03-修正報告.md` 之行為變更清單。

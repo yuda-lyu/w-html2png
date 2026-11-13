@@ -2,8 +2,9 @@
 
 本檔記當前已開發功能之最新狀態(只記現況;過程見 `sgud/exp/experience.md`)。規則見 `sgud/rule/rulebook.md`。
 
-- 最近一次更新:2026-11-03(h2p236:頁面完成之判定,修 `networkidle` 早於頁尾腳本之競態,規則 R18;與 h2p60 之 `opt.timeout`、`opt.onTrace`〔R17,Gitea #60〕一起待主控複審發布;`package.json`、`dist/`、`script.txt` 未動)。前次:2026-11-02(h2p267:`toolg/` 改回 dspec〈自有套件之發布與建置腳本〉標準寫法)。
-- 最近一次驗證(h2p236,2026-11-03):`npm test` 連跑 5 次 5/5 全綠(284 案,同時段 `w-web-perm`、`w-web-sso` 佔另兩鎖位);`unit-pageSettleFake` 36、`unit-pageSettle` 21;22 個變異全數被擊殺;7 個壓力行程之負載試驗各 4 輪,有競態失敗之輪數:修前 HEAD 4、h2p60 3、修後 0(輪數偏少,獨佔鎖排隊所致,報告 `C:\opensrcOper\dnow\20261103132311\agent-out\h2p236-修正報告.md`);PNG sha256 七項與假瀏覽器呼叫序列 14 情境與修前相同;alive 每次出圖中位 622 → 708ms。
+- 最近一次更新:2026-11-13(pm-h2p:瀏覽器改經自有套件 w-playwright 啟動,規則 R19;`package.json` 相依 `playwright-core` → `w-playwright ^1.0.1`〔已安裝 1.0.1、其 playwright-core 1.64.1〕,`version`、`dist/`、`script.txt` 未動;待主控複審發布)。前次:2026-11-03(h2p236:頁面完成之判定,規則 R18)。
+- 最近一次驗證(pm-h2p,2026-11-13,`W_PLAYWRIGHT_LOGON_GUARD=1`):全套 `mocha --parallel --jobs 4 "test/*.test.mjs"` 見報告(錯誤密碼次數全程 0 → 0);`unit-timeoutFake`＋`unit-pageSettleFake`＋`unit-wpwLaunch` 連跑 5 次 5/5(各 120 案);變異 3/3 被擊殺;testa、testb 重出與基準圖 base64 逐字相同。報告 `C:\opensrcOper\dnow\20261113103344\agent-out\pm-h2p-修正報告.md`。
+- 前次驗證(h2p236,2026-11-03):`npm test` 連跑 5 次 5/5 全綠(284 案,同時段 `w-web-perm`、`w-web-sso` 佔另兩鎖位);`unit-pageSettleFake` 36、`unit-pageSettle` 21;22 個變異全數被擊殺;7 個壓力行程之負載試驗各 4 輪,有競態失敗之輪數:修前 HEAD 4、h2p60 3、修後 0(輪數偏少,獨佔鎖排隊所致,報告 `C:\opensrcOper\dnow\20261103132311\agent-out\h2p236-修正報告.md`);PNG sha256 七項與假瀏覽器呼叫序列 14 情境與修前相同;alive 每次出圖中位 622 → 708ms。
 - 前次驗證(h2p60,2026-11-03):`unit-timeoutFake` 71 案同檔連跑 10 次 10/10 通過、`unit-timeout`(真 chrome)8/8、全套 `mocha --parallel "test/*.test.mjs"` 227 案(6 次中 4 次全綠;2 次僅 `unit-pageError`「page errors are retried according to retry」偶發紅,單檔重跑 10/10 綠,該競態已由 h2p236 修正);22 個變異全數被擊殺;未給 `timeout` 時假瀏覽器呼叫序列 14 情境與修前逐字相同、真 chrome 出圖 PNG sha256 7 項與修前相同;暫停真 chrome(renderer/主程序)實測見報告。前次驗證:2026-11-02 於套件根依 `script.txt` 實跑 `cleanFolder` → jsdoc → `gDistRollup`:`dist/` 兩檔與改前逐位元組相同(`w-html2png.umd.js` 113,784 位元組、`.map` 148,588 位元組),`docs/` 37 檔僅 8 個頁面之產生時間行不同;全套 `npm test`(mocha --parallel,11 檔)結果見報告 `C:\opensrcOper\dnow\20261102075126\agent-out\h2p267-修正報告.md`。前次:2026-10-29 全套綠,報告 `C:\opensrcOper\dnow\20261028054319\agent-out\bin-html2png-修正報告.md`。
 
 ## 功能現況
@@ -14,8 +15,9 @@
 | 單次出圖允許時長 `opt.timeout`(每次嘗試;逾時分頁面層/瀏覽器層,限時關閉,確認歸屬後樹狀強制結束;未給或非預期輸入視為未給,流程與修前相同)與觀察回調 `opt.onTrace` | 完成(2026-11-03,待主控複審發布) | R17、R12 | `unit-timeoutFake`(假瀏覽器＋假時鐘)、`unit-timeout`(真 chrome) |
 | 頁面完成之判定(載入返回後等 `load` 與靜止窗,才檢查頁面錯誤、`funPageWait`、截圖;不依機器負載) | 完成(2026-11-03,待主控複審發布) | R18、R7 | `unit-pageSettleFake`(假瀏覽器＋假時鐘)、`unit-pageSettle`(真 chrome,頁內同步阻塞)、`unit-dist` |
 | 頁面函式庫(lodash、wsemi)本機供應 | 完成 | R11 | `unit-cdnLibs` |
+| 瀏覽器一律經 w-playwright 啟動(唯一啟動點 `launchBrowser`;守門之 `--disable-features` 恰一串;啟動失敗 `[code] 說明`;不直接依賴 playwright／playwright-core) | 完成(2026-11-13,待主控複審發布) | R19、R8 | `unit-wpwLaunch`(替身)、`api-ensureBins`(`next()` 真啟動)、`unit-dist`(dist 經 w-playwright) |
 | 套件自帶 chrome 經 `ensureBins`(wsemi `fsEnsureBins`,檔案組 `chrome`,釘選提交 `bf41fac5…`)取得;`opt.executablePath` 優先 | 完成(2026-10-29) | R2、R10、R14、R16 | `api-ensureBins`、`unit-binManifest`、`unit-dist` |
-| UMD 建置(dist;`toolg/gDistRollup.mjs` 以 `'./src'`、`'./dist'` 相對 cwd,依 dspec〈自有套件之發布與建置腳本〉) | 完成(2026-11-02 改回標準寫法) | R4、R8 | `unit-dist`(副本＋指定 cwd 執行 toolg)、`unit-binManifest`(globals/external 文字檢查) |
+| UMD 建置(dist;`toolg/gDistRollup.mjs` 以 `'./src'`、`'./dist'` 相對 cwd,依 dspec〈自有套件之發布與建置腳本〉;external 為 Node 內建＋`w-playwright`) | 完成(2026-11-02 改回標準寫法;2026-11-13 external 改 `w-playwright`) | R4、R8、R19 | `unit-dist`(副本＋指定 cwd 執行 toolg)、`unit-binManifest`、`unit-wpwLaunch`(globals/external 文字檢查) |
 | 平台限制(未給 executablePath 時限 Windows) | 完成 | R15 | `unit-errors` |
 
 - 外部執行檔:`bin/chrome/portable.zip.001`~`008`(入 git、不入 npm 包)、`bin/manifest.json`(1 組 107 檔,421,065,985 位元組;組識別 `732088aa8aeb2be51a145a68b27b0fa247c111141a08f5437fef9af02977e797`)。主幹已無 `chrome/`。
@@ -23,6 +25,8 @@
 
 ## 已知缺口與待辦
 
+- repo 內 `dist/w-html2png.umd.js` 仍為舊建置(`require('playwright-core')`),發布流程依現行 src 重產後即為 `require('w-playwright')`;`unit-dist` 以現行 src 建置之副本驗證。
+- 啟動失敗之訊息不含 Playwright 原錯誤(R19 已知限制①);是否開放 w-playwright 之 `funLog`(如寫入 `opt.writeError` 之錯誤檔)待裁示。
 - 下游 w-hc2png 之測試深層匯入 `w-html2png/src/autoDownloadFiles.mjs`(已移除),須於連動時改用 `ensureBins`(主控通報;本套件不改他套件)。
 - 1.0.53 以前之版本自主幹 `chrome/` 下載,主幹移除後新環境首次使用得 HTTP 404(待主控／使用者裁示;比照 dspec S2 之 w-dwload-dlp)。
 - `unit-render`「execJsPost string literal with plain is verbatim」於修前 HEAD 副本懸置 180 秒 1 次(2026-11-03,無壓力全套 5 次中 1 次),根因未定位,推測為 Chrome 卡住;修後 5 次全套與 4 輪壓力未見。

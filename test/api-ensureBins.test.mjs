@@ -4,7 +4,7 @@ import path from 'path'
 import crypto from 'crypto'
 import assert from 'assert'
 import { fileURLToPath, pathToFileURL } from 'url'
-import { chromium } from 'playwright-core'
+import wpw from 'w-playwright'
 import ensureBins from '../src/ensureBins.mjs'
 import WHtml2png from '../src/WHtml2png.mjs'
 import { makeFakeBundle, makeFakePkg, putMirrorParts } from './tools/fakeBundle.mjs'
@@ -449,17 +449,17 @@ describe(`ensureBins: bundle logic with a small bundle of the same shape (T3~T7,
 
 
 //WHtml2png主函數無法注入fetch, 故攔截全域fetch: 被呼叫即記錄並拋錯, 斷言未被呼叫(否則回歸為直連時測試仍會因真網路而綠);
-//另包裝chromium.launch記錄所啟動之執行檔, 斷言為ensureBins回傳之組內chrome.exe(規格§9: 主函數類入口須斷言所啟動者)
+//另以w-playwright之setBrowserTypeForTest包裝其所呼叫之BrowserType(替身記錄後以next()真啟動, 接縫不用替身), 記錄所啟動之執行檔, 斷言為ensureBins回傳之組內chrome.exe(規格§9: 主函數類入口須斷言所啟動者)
 describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
     this.timeout(180000)
 
     let fdt = path.resolve('./test/_tmp/ensureBinsEntry')
     let restoreBin = null
     let fetchBak = null
-    let launchBak = null
-    let launchOwn = false
+    let restoreSeam = null
     let netCalls = []
     let launched = []
+    let launchedArgs = []
     let html = '<div style="width:120px;height:40px;background:rgb(0,0,255)"></div>'
 
     before(async function() {
@@ -473,12 +473,13 @@ describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
             netCalls.push(String(url && url.url ? url.url : url))
             throw new Error(`network access is forbidden in tests: ${url}`)
         }
-        launchOwn = Object.prototype.hasOwnProperty.call(chromium, 'launch')
-        launchBak = chromium.launch
-        chromium.launch = function(opt) {
-            launched.push(opt && opt.executablePath)
-            return launchBak.call(this, opt)
-        }
+        restoreSeam = wpw.setBrowserTypeForTest({
+            launch: (opt, next) => {
+                launched.push(opt && opt.executablePath)
+                launchedArgs.push(opt && opt.args)
+                return next() //以同一份合併後選項真啟動
+            },
+        })
     })
 
     after(async function() {
@@ -486,13 +487,8 @@ describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
         if (fetchBak) {
             globalThis.fetch = fetchBak
         }
-        if (launchBak) {
-            if (launchOwn) {
-                chromium.launch = launchBak
-            }
-            else {
-                delete chromium.launch
-            }
+        if (restoreSeam) {
+            restoreSeam()
         }
         if (restoreBin) {
             restoreBin()
@@ -503,6 +499,7 @@ describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
     beforeEach(function() {
         netCalls = []
         launched = []
+        launchedArgs = []
     })
 
     it(`should catch a call to the global fetch (the interception below is effective)`, async function() {
@@ -521,6 +518,10 @@ describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
             let b64 = await WHtml2png(120, 40, 1, html, { mode, retry: 1 })
             assert.ok(countNonWhite(decodePng(b64)) > 1000)
             assert.strict.deepStrictEqual(launched, [fpExe])
+            //真啟動(next())之命令列恰一個--disable-features, 為最後一個參數且含守門功能(規則R19)
+            let args = launchedArgs[0]
+            assert.strict.equal(args.filter((a) => /^--?disable-features(=|$)/i.test(a)).length, 1, JSON.stringify(args))
+            assert.strict.equal(/^--disable-features=(.+,)?AutofillAiWalletPrivatePasses(,|$)/.test(args[args.length - 1]), true, args[args.length - 1])
             assert.strict.equal(fpExe.startsWith(r.chrome + path.sep), true, fpExe)
             assert.strict.equal(r.chrome.startsWith(path.resolve('bin-cache') + path.sep), true, r.chrome) //D3: 預設快取<套件根>/bin-cache/
             assert.strict.equal(/[\\/]portable[\\/]App[\\/]Chrome-bin[\\/][^\\/]+[\\/]chrome\.exe$/.test(fpExe), true, fpExe)

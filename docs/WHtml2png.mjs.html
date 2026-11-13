@@ -47,7 +47,7 @@
         <article>
             <pre class="prettyprint source linenums"><code>import fs from 'fs'
 import path from 'path'
-import { chromium } from 'playwright-core'
+import wpw from 'w-playwright'
 import get from 'lodash-es/get.js'
 import each from 'lodash-es/each.js'
 import size from 'lodash-es/size.js'
@@ -99,7 +99,7 @@ let timeSettleMax = 60 * 1000
 
 
 //常駐瀏覽器狀態(模組層單例), 供alive模式使用
-//gen為現行世代{ id, pmBrowser, ctxPms, browser, guarded, pmPid, pid }: pmBrowser為chromium.launch之Promise, browser為其解決後之瀏覽器(啟動中為undefined), ctxPms為以deviceScaleFactor為key之context Promise快取;
+//gen為現行世代{ id, pmBrowser, ctxPms, browser, guarded, pmPid, pid }: pmBrowser為launchBrowser之Promise, browser為其解決後之瀏覽器(啟動中為undefined), ctxPms為以deviceScaleFactor為key之context Promise快取;
 //guarded為曾有呼叫給opt.timeout(才限時關閉並可強制結束), pmPid與pid為經CDP取得之瀏覽器主程序pid(guarded呼叫才取, 未取得為undefined, 取不到為null); null代表下次呼叫須啟動新世代
 let gen = null
 let genSeq = 0
@@ -171,7 +171,21 @@ let getLaunchOpt = (executablePath, modeHeadless) => {
 }
 
 
-//newContext, 建立context並攔截模板之函式庫網址改由本機供應, 失敗時關閉已建立之context
+//launchBrowser, 啟動瀏覽器, alive與single模式共用之唯一啟動點: 一律經w-playwright啟動(每次啟動之命令列恰一個--disable-features, 含Playwright預設清單與守門功能AutofillAiWalletPrivatePasses, 見README), 不直接呼叫playwright-core
+//w-playwright之失敗為帶code之固定詞彙Error(E_LAUNCH、E_LAUNCH_TIMEOUT、E_LOGON_GUARD、E_ENV、E_PW_VERSION等), 本套件之reject為字串而會失去code, 故改為訊息'[錯誤碼] 說明'之Error(同取不到自帶chrome時之格式)
+let launchBrowser = (executablePath, modeHeadless) => {
+    return wpw.launchChromium(getLaunchOpt(executablePath, modeHeadless))
+        .catch((err) => {
+            let code = get(err, 'code')
+            if (isestr(code)) {
+                throw new Error(`[${code}] ${errToMsg(err)}`)
+            }
+            throw err
+        })
+}
+
+
+//newContext,建立context並攔截模板之函式庫網址改由本機供應, 失敗時關閉已建立之context
 let newContext = async (browser, scale) => {
     let context = await browser.newContext({
         viewport: {
@@ -467,7 +481,7 @@ let getGen = (executablePath, modeHeadless) => {
             pid: undefined,
             pmClose: undefined,
         }
-        g.pmBrowser = chromium.launch(getLaunchOpt(executablePath, modeHeadless))
+        g.pmBrowser = launchBrowser(executablePath, modeHeadless)
             .then((browser) => {
 
                 //browser
@@ -659,7 +673,7 @@ let singleStrategy = {
     acquire: async ({ executablePath, modeHeadless, scale, guard, trace, onRelease }) => {
 
         //browser
-        let browser = await chromium.launch(getLaunchOpt(executablePath, modeHeadless))
+        let browser = await launchBrowser(executablePath, modeHeadless)
 
         //pid, 給了opt.timeout之呼叫才取(經CDP), 供逾時卡死時確認歸屬後強制結束; 結束當下才取值(取pid期間逾時亦可用)
         let pid = null
@@ -715,7 +729,7 @@ async function core(width, height, scale, html, opt, strategy) {
     //st, 本次呼叫開始時之狀態(alive用於判斷其後是否被WHtml2png.close())
     let st = strategy.begin()
 
-    //executablePath, 可由外部指定瀏覽器執行檔(如本機安裝Chrome或playwright託管chromium), 未指定則使用套件自帶之免安裝chrome
+    //executablePath, 可由外部指定瀏覽器執行檔(如本機安裝Chrome或Playwright受管之chromium), 未指定則使用套件自帶之免安裝chrome; 皆經launchBrowser(w-playwright)啟動
     let executablePath = get(opt, 'executablePath')
     if (!isestr(executablePath)) {
         executablePath = ''
@@ -1498,6 +1512,10 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * 之後自快取取得(每行程首次亦校驗, 一檔不符即整組重取); 安裝套件時不下載; 環境變數W_BIN_CACHE、W_BIN_MIRROR、W_BIN_OFFLINE見README〈外部執行檔〉;
  * 取得chrome永不寫入當前工作路徑(僅opt.fdHtml/opt.fdErr之預設為當前工作路徑下之./_convertTemp)
  *
+ * 瀏覽器一律經自有套件w-playwright啟動(不直接依賴playwright/playwright-core; 安裝本套件即帶入w-playwright與其精確釘版之playwright-core):
+ * 每次啟動之命令列恰一個--disable-features(Playwright預設清單＋AutofillAiWalletPrivatePasses), 因Windows上Chromium 153起每啟動一次即以錯誤密碼替目前使用者登入一次(10分鐘10次即鎖帳號), 停用該功能即不發生, 且Chromium對多個--disable-features只取最後一個;
+ * 環境變數PWDEBUG(inspector模式)、SELENIUM_REMOTE_URL不支援(啟動即失敗), 啟動失敗時reject之字串為'[錯誤碼] 說明'(錯誤碼如E_LAUNCH、E_LAUNCH_TIMEOUT、E_LOGON_GUARD、E_ENV、E_PW_VERSION, 由w-playwright定義)
+ *
  * 頁面模板預先載入lodash(全域_)與wsemi(全域w), 皆由本套件相依之本機檔案供應(不需網路), 可於execJsHead、execJsPost使用
  *
  * 內容皆逐字插入頁面(含$&amp;、$'、$$等字樣): html置於div#pl內; execJsHead與execJsPost以inline之script插入, 內容不得含字面&lt;/script>(需要時寫成&lt;\/script>);
@@ -1514,7 +1532,7 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * @param {String} html 輸入HTML字串，須為有效字串
  * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {String} [opt.mode='single'] 輸入瀏覽器使用模式字串，'single'代表每次呼叫啟閉瀏覽器，'alive'代表常駐瀏覽器供同行程重用，預設'single'
- * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝Chrome或playwright託管chromium等(給予時不限作業系統)，未給則使用套件自帶之免安裝chrome(只支援Windows，經ensureBins取得，快取無檔時自動下載或自鏡像取得)，給予時不取套件自帶之chrome；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔與modeHeadless，欲切換須先呼叫WHtml2png.close()，預設''
+ * @param {String} [opt.executablePath=''] 輸入瀏覽器執行檔路徑字串，可指定本機安裝之Google Chrome(須自行安裝)或Playwright受管之Chromium(以w-playwright之ensureChromium({ kind: 'chromium' })取得，勿用npx playwright install)等(給予時不限作業系統；一律經w-playwright啟動並加入守門參數)，未給則使用套件自帶之免安裝chrome(只支援Windows，經ensureBins取得，快取無檔時自動下載或自鏡像取得)，給予時不取套件自帶之chrome；注意alive模式之常駐瀏覽器由同行程第一次呼叫決定執行檔與modeHeadless，欲切換須先呼叫WHtml2png.close()，預設''
  * @param {Boolean|String} [opt.modeHeadless='new'] 輸入是否無頭，false代表顯示UI，其餘視為無頭，預設'new'
  * @param {Array} [opt.stylesHead=[]] 輸入引用css程式碼網址陣列，預設[]
  * @param {Array} [opt.scriptsHead=[]] 輸入引用js程式碼網址陣列，預設[]
@@ -1529,7 +1547,7 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
  * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串(相對於當前工作路徑)，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'
  * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串(相對於當前工作路徑)，預設'./_convertTemp'
- * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串(取不到套件自帶之chrome時為'[錯誤碼] 說明'，錯誤碼如E_OFFLINE_MISSING、E_HASH_MISMATCH)
+ * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串(取不到套件自帶之chrome時為'[錯誤碼] 說明'，錯誤碼如E_OFFLINE_MISSING、E_HASH_MISMATCH；啟動瀏覽器失敗時訊息含'[錯誤碼] 說明'，錯誤碼如E_LAUNCH、E_LAUNCH_TIMEOUT、E_LOGON_GUARD)
  * @example
  *
  * async function testa() {
@@ -1622,7 +1640,7 @@ export default WHtml2png
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Nov 13 2026 00:36:11 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Nov 13 2026 14:54:09 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

@@ -12,7 +12,7 @@ import { installFake, makeTracer } from './tools/fakeChromium.mjs'
 //瀏覽器主程序pid指向測試自行啟動之真實空轉行程, 使強制結束(樹狀結束pid)可被真實驗證(以該行程之exit事件為準, 且絕不指向任何他人行程)
 let fdTest = path.resolve('./test/_tmp/timeoutFake')
 let html = '<div>x</div>'
-let exe = process.execPath //executablePath只需為存在之檔案(chromium.launch已被取代, 不會執行)
+let exe = process.execPath //executablePath只需為存在之檔案(w-playwright所呼叫之BrowserType已以setBrowserTypeForTest取代, 不會執行)
 let call = (opt) => WHtml2png(100, 50, 1, html, { mode: 'alive', executablePath: exe, fdHtml: fdTest, fdErr: fdTest, ...opt })
 let settle = (pm) => pm.then((v) => ({ ok: true, v }), (e) => ({ ok: false, e: String(e) }))
 let flush = async () => { //讓所有microtask與已排入之I/O回呼跑完(setImmediate不被假時鐘取代, 多輪使其不受單輪事件迴圈順序影響)
@@ -31,6 +31,8 @@ let mkFn = (fake) => {
 }
 let isAlive = (child) => child.exitCode === null && child.signalCode === null
 let realSetTimeout = globalThis.setTimeout
+//guardOn, w-playwright之執行期登入守門是否開啟(其README: 未設、''、'0'、'false'為關): 開啟時啟動前置含子行程讀取錯誤次數, 假時鐘推進之逾時必先於替身被呼叫
+let guardOn = !['', '0', 'false'].includes(String(process.env.W_PLAYWRIGHT_LOGON_GUARD ?? ''))
 
 
 describe('unit-timeoutFake', function() {
@@ -333,6 +335,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ retry: 1, timeout: 20000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //經w-playwright之前置後才呼叫替身
             await flush()
             await tick(5000) //pid查詢限時5秒
             await tr.wait('step', (e) => e.step === 'context.newPage()')
@@ -373,6 +376,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ retry: 1, timeout: 1000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //啟動已發起(替身卡住中)
             await tick(1000)
             let r = await pm
             assert.strict.equal(r.e, 'timeout[1000ms] in strategy.acquire (browser will be closed after launch)')
@@ -445,6 +449,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ mode: 'single', retry: 1, timeout: 1000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //啟動已發起(替身卡住中)
             await tick(1000)
             let r = await pm
             assert.strict.equal(r.e, 'timeout[1000ms] in strategy.acquire')
@@ -455,6 +460,79 @@ describe('unit-timeoutFake', function() {
             assert.strict.equal((await tr.wait('cancelled')).step, 'strategy.acquire')
             assert.strict.equal(b.calls.newPage, 0) //不開頁
             assert.strict.equal(b.calls.close, 1)
+        })
+
+        //spec(R17之5、R19): 啟動經w-playwright, 其前置(環境、版本檢查、登入守門讀取錯誤次數)期間替身尚未被呼叫; 逾時或close()落在此期間, 處置同「啟動中」: 不等待, 啟動完成後關閉, 不開頁
+        let tracerAt = (tr, at) => (e) => {
+            if (e.type === 'timeout') {
+                at.n = env.launches.length //逾時當下替身被呼叫之次數
+            }
+            tr.onTrace(e)
+        }
+
+        it('alive: 逾時落在w-playwright之啟動前置: 不等待, 其後啟動完成即於背景關閉, 不開頁; 下一次呼叫另啟新瀏覽器', async function() {
+            env.cfg.launch = 'hang'
+            let tr = makeTracer()
+            let at = { n: null }
+            let pm = settle(call({ retry: 1, timeout: 1000, onTrace: tracerAt(tr, at) }))
+            await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await tick(1000)
+            let r = await pm
+            assert.strict.equal(r.e, 'timeout[1000ms] in strategy.acquire (browser will be closed after launch)')
+            if (guardOn) {
+                assert.strict.equal(at.n, 0) //登入守門開啟時, 逾時確實落在替身被呼叫之前
+            }
+            let b = await env.waitLaunch(1)
+            env.launchGate.resolve() //啟動完成
+            await b.onClose.pm //被要求關閉
+            assert.strict.equal(b.calls.close, 1)
+            assert.strict.equal(b.calls.newPage, 0)
+            env.cfg.launch = 'ok'
+            let r2 = await settle(call({ retry: 1, timeout: 3000 }))
+            assert.strict.equal(r2.ok, true, r2.e)
+            assert.strict.equal(env.launches.length, 2)
+        })
+
+        it('single: 逾時落在w-playwright之啟動前置: 其後啟動完成之瀏覽器立即釋放, 不開頁', async function() {
+            env.cfg.launch = 'hang'
+            let tr = makeTracer()
+            let at = { n: null }
+            let pm = settle(call({ mode: 'single', retry: 1, timeout: 1000, onTrace: tracerAt(tr, at) }))
+            await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await tick(1000)
+            let r = await pm
+            assert.strict.equal(r.e, 'timeout[1000ms] in strategy.acquire')
+            if (guardOn) {
+                assert.strict.equal(at.n, 0)
+            }
+            let b = await env.waitLaunch(1)
+            env.launchGate.resolve() //啟動完成: 登記釋放函數時已逾時, 立即釋放
+            assert.strict.equal((await tr.wait('browser-close')).closed, true)
+            assert.strict.equal((await tr.wait('cancelled')).step, 'strategy.acquire')
+            assert.strict.equal(b.calls.newPage, 0)
+            assert.strict.equal(b.calls.close, 1)
+        })
+
+        it('alive(未給timeout): WHtml2png.close()落在w-playwright之啟動前置: 啟動完成後關閉, 該呼叫不開頁、不重試', async function() {
+            env.cfg.launch = 'hang'
+            let tr = makeTracer()
+            let pm = settle(call({ retry: 3, onTrace: tr.onTrace }))
+            await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            let launchesAtClose = env.launches.length
+            let pmClose = WHtml2png.close()
+            if (guardOn) {
+                assert.strict.equal(launchesAtClose, 0) //close()確實落在替身被呼叫之前
+            }
+            let b = await env.waitLaunch(1)
+            env.launchGate.resolve()
+            await pmClose
+            assert.strict.equal(b.calls.close, 1)
+            let r = await pm
+            assert.strict.equal(r.ok, false)
+            assert.strict.equal(r.e.includes('resident browser has been closed'), true, r.e)
+            assert.strict.equal(b.calls.newPage, 0)
+            assert.strict.equal(tr.of('retry').length, 0) //close()前開始之呼叫不再重試(R12)
+            assert.strict.equal(env.launches.length, 1)
         })
 
     })
@@ -468,6 +546,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ mode: 'single', retry: 1, timeout: 2000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //經w-playwright之前置後才呼叫替身
             await flush()
             let b = env.launches[0]
             assert.strict.equal(b.calls.newContext, 1)
@@ -503,6 +582,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ retry: 1, timeout: 1000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //經w-playwright之前置後才呼叫替身
             await flush()
             let b = env.launches[0]
             await tick(1000) //取pid(CDP)尚未回應即逾時
@@ -523,6 +603,7 @@ describe('unit-timeoutFake', function() {
             env.cfg.launch = 'hang'
             env.cfg.close = 'hang'
             let pm = settle(call({ retry: 1, timeout: 1000 }))
+            await env.waitLaunch(1, pm) //啟動已發起(替身卡住中)
             await flush()
             await tick(1000)
             let r = await pm
@@ -608,6 +689,7 @@ describe('unit-timeoutFake', function() {
             let tr = makeTracer()
             let pm = settle(call({ mode: 'single', retry: 1, timeout: 1000, onTrace: tr.onTrace }))
             await tr.wait('step', (e) => e.step === 'strategy.acquire')
+            await env.waitLaunch(1, pm) //啟動已發起(替身卡住中)
             await tick(1000)
             let r = await pm
             assert.strict.equal(r.e, 'timeout[1000ms] in strategy.acquire') //逾時當下尚無瀏覽器可釋放
@@ -733,6 +815,7 @@ describe('unit-timeoutFake', function() {
                 let ok = await settle(call({ mode: 'single', retry: 1, timeout: 5000, onTrace: cb }))
                 assert.strict.equal(ok.ok, true, ok.e)
                 let pm = settle(call({ mode: 'single', retry: 1, timeout: 2000, funPageWait: mkFn('hang'), onTrace: cb }))
+                await env.waitLaunch(2, pm) //single之第二次呼叫之瀏覽器(經w-playwright之前置後才呼叫替身)
                 await flush()
                 await tick(2000)
                 let r = await pm

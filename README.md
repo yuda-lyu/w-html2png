@@ -18,6 +18,9 @@ To view documentation or get support, visit [docs](https://yuda-lyu.github.io/w-
 npm i w-html2png
 ```
 
+- 安裝即帶入自有套件 `w-playwright`(及其精確釘版之 `playwright-core` 1.64.1);本套件不直接依賴 `playwright`／`playwright-core`,使用端不需另裝.瀏覽器一律經 `w-playwright` 啟動,見 [瀏覽器之啟動](#瀏覽器之啟動w-playwright).
+- 預設之瀏覽器為本套件自帶之免安裝 Chrome(Windows),首次調用時經 `WHtml2png.ensureBins()` 取得,見 [外部執行檔](#外部執行檔);不需 `npx playwright install`.
+
 #### Example for function:
 > **Link:** [[dev source code](https://github.com/yuda-lyu/w-html2png/blob/master/scla.mjs)]
 ```alias
@@ -64,7 +67,8 @@ testa()
 ```
 
 ### Notes
-- **Platform**: the bundled portable Chrome is Windows only. On other platforms give `opt.executablePath` (a local Chrome or a Playwright-managed Chromium).
+- **Platform**: the bundled portable Chrome is Windows only. On other platforms give `opt.executablePath` (a local Google Chrome you install yourself, or a Playwright-managed Chromium obtained by `w-playwright`'s `ensureChromium({ kind: 'chromium' })`; see [瀏覽器之啟動](#瀏覽器之啟動w-playwright)).
+- **Launch**: every browser is launched through `w-playwright`, which always adds exactly one `--disable-features=<Playwright defaults>,AutofillAiWalletPrivatePasses` to the command line (on Windows, Chromium 153+ otherwise logs on the current user with a wrong password at every launch and locks the account after 10 launches in 10 minutes). Launch failures reject with `[E_LAUNCH] ...`-style strings; see [瀏覽器之啟動](#瀏覽器之啟動w-playwright).
 - **Where Chrome lives**: without `opt.executablePath`, Chrome is obtained by `WHtml2png.ensureBins()` (see [外部執行檔](#外部執行檔)) and cached in `<w-html2png package>/bin-cache/`, independent of the current working directory; obtaining Chrome never writes to the working directory (only `opt.fdHtml`/`opt.fdErr`, used with `opt.funGetUrl`/`opt.writeError`, default to `./_convertTemp`). With `opt.executablePath` the bundled Chrome is not obtained at all.
 - **Page globals**: the page preloads lodash (`_`) and wsemi (`w`) from the installed packages, so no network is needed for them.
 - **Content is inserted verbatim** (including `$&`, `$'`, `$$`). `execJsHead`/`execJsPost` are inline scripts and must not contain a literal `</script>` (write `<\/script>`). URLs in `stylesHead`/`scriptsHead` must not contain double quotes.
@@ -73,6 +77,25 @@ testa()
 - **Page completion**: the page errors check and the screenshot wait for the page to finish, independent of machine load; see [頁面完成之判定](#頁面完成之判定).
 - **alive mode**: call `WHtml2png.close()` before a batch script ends so Node can exit.
 - **Time limit**: give `opt.timeout` (milliseconds per attempt) to bound a stuck render; see [單次出圖之允許時長](#單次出圖之允許時長optimeout). Without it nothing changes.
+
+## 瀏覽器之啟動(w-playwright)
+
+本套件之 single 與 alive 兩模式皆只有一個啟動點,一律呼叫自有套件 `w-playwright` 之 `launchChromium`(不直接呼叫 `playwright`／`playwright-core`).本套件給之啟動參數不變(`--lang=en-US`、`--no-sandbox`、`--disable-gpu` 等,無頭與否依 `opt.modeHeadless`,啟動時限 60 秒),`w-playwright` 於其後加上守門參數:
+
+| 項目 | 內容 |
+|---|---|
+| 守門參數 | 每次啟動之命令列**恰一個** `--disable-features`,為傳給 Playwright 之 `args` 之最後一個元素(Playwright 其後只再附加 `--user-data-dir`、`--remote-debugging-pipe` 等非功能開關),內容為 Playwright 預設停用之功能＋`AutofillAiWalletPrivatePasses`;Playwright 自帶之那一串以 `ignoreDefaultArgs` 去掉 |
+| 原因 | Windows 上 Chromium 153 起(Google Chrome、Edge、完整 Chromium),每啟動一個新的瀏覽器根行程,即以錯誤密碼替目前之使用者登入一次(錯誤密碼次數 +1),本機原則 10 分鐘內 10 次即鎖住帳號;停用 `AutofillAiWalletPrivatePasses` 即不發生.Chromium 對多個 `--disable-features` 只取最後一個,故須合併為一串 |
+| 自帶之 Chrome 138 | 早於 153,實測經本套件啟動錯誤密碼次數不增加;仍一律加入守門參數(`opt.executablePath` 可指向任何 Chromium 系瀏覽器) |
+| 不支援之環境變數 | `PWDEBUG`(inspector 模式)、`SELENIUM_REMOTE_URL`:會使守門失效,啟動即失敗(`[E_ENV] ...`) |
+| 執行期登入守門(選用) | 環境變數 `W_PLAYWRIGHT_LOGON_GUARD=1` 時,每次啟動前(Windows 本機帳號)讀目前使用者之錯誤密碼次數,≥1、已鎖或讀不到即拒絕啟動(`[E_LOGON_GUARD] ...`);同一行程之啟動依序進行(single 模式之並發呼叫各自排隊啟動),讀取與排隊之時間不在本套件之 60 秒啟動時限內,需要整體時限者給 `opt.timeout`(其計時涵蓋取得瀏覽器;逾時落在排隊或讀取期間時,該瀏覽器於啟動完成後關閉).預設關,細節見 `w-playwright` 之 README |
+
+- **安裝與取得瀏覽器**:
+  - 預設(未給 `opt.executablePath`):本套件自帶之免安裝 Chrome,經 `WHtml2png.ensureBins()` 取得(見 [外部執行檔](#外部執行檔);離線以 `W_BIN_MIRROR`、`W_BIN_OFFLINE`).
+  - 本機安裝之 Google Chrome:須自行安裝 Google Chrome,以 `opt.executablePath` 指定其 `chrome.exe`(可用 `w-playwright` 之 `findSystemChrome()` 查其位置,只判檔案存在).
+  - Playwright 受管之 Chromium:以 `w-playwright` 之 `await wpw.ensureChromium({ kind: 'chromium' })` 取得,**不要用 `npx playwright install`**(依賴樹中他版被提升時會下載到不同版本).`w-playwright` 為本套件之相依,使用端呼叫前須能解析到與本套件相同之那一份(使用端自行 `npm i w-playwright` 時取與本套件 `package.json` 相同之版本範圍,並以 `npm ls w-playwright` 確認全樹只有一份;各版之 `playwright-core` 為精確釘版,版本不同即可能下載到另一個瀏覽器版本);離線時於可連網之機器取得後,把 Playwright 之瀏覽器資料夾(Windows 預設 `%LOCALAPPDATA%\ms-playwright`)複製至目標機,並以環境變數 `PLAYWRIGHT_BROWSERS_PATH` 指向之(須在載入本套件前設定).其執行檔路徑由使用端自行指定於 `opt.executablePath`.
+- **啟動失敗之訊息**:reject 之字串含 `[錯誤碼] 說明`,錯誤碼由 `w-playwright` 定義,如 `[E_LAUNCH] browser launch failed`、`[E_LAUNCH_TIMEOUT] browser launch timed out`、`[E_LOGON_GUARD] ...`、`[E_ENV] ...`、`[E_PW_VERSION] ...`;不含 Playwright 之原錯誤(其呼叫紀錄含完整命令列與設定檔路徑).
+- 依賴樹之 `playwright-core` 若被換成其他版本(如 overrides),`w-playwright` 拒絕啟動(`[E_PW_VERSION] ...`).
 
 ## 頁面完成之判定
 
@@ -149,6 +172,10 @@ let fpExe = bins.bundles.chrome.files['portable/App/Chrome-bin/138.0.7204.97/chr
 
 本版不保留舊版相容(程式碼品質優先,破壞性變更由下游連帶修正):
 
+- 瀏覽器改經自有套件 `w-playwright` 啟動:相依移除 `playwright-core`、加入 `w-playwright`(其相依為精確 `playwright-core` 1.64.1;依賴樹之 `playwright-core` 為他版時拒絕啟動).
+- 啟動參數於本套件既有參數之後多一串 `--disable-features=<Playwright 預設>,AutofillAiWalletPrivatePasses`(恰一串;原 Playwright 自帶之一串去掉,停用之功能為其超集).自帶之 Chrome 138 出圖不受影響.
+- 啟動失敗之訊息改為 `w-playwright` 之固定詞彙並帶錯誤碼(如 `[E_LAUNCH] browser launch failed`),不再含 Playwright 之原錯誤(含執行檔路徑與呼叫紀錄).
+- 環境變數 `PWDEBUG`(inspector 模式)或 `SELENIUM_REMOTE_URL` 有值時啟動即失敗(`[E_ENV] ...`);`W_PLAYWRIGHT_LOGON_GUARD=1` 時每次啟動前讀錯誤密碼次數(見 [瀏覽器之啟動](#瀏覽器之啟動w-playwright)).
 - 套件自帶之 Chrome 改經 `WHtml2png.ensureBins()`(wsemi `fsEnsureBins`)取得,快取位置由 `<套件根>/chrome/<chrome版本>/portable/` 改為 `<套件根>/bin-cache/<組識別>/portable/App/Chrome-bin/`(或 `W_BIN_CACHE`);只取 `Chrome-bin/`,不再含 portable 之啟動器 `GoogleChromePortable.exe` 與 `App/AppInfo`、`App/DefaultData`.舊位置之 Chrome 不再使用,可自行刪除.
 - 移除舊位置之唯讀查找:`<套件根>/chrome/portable/`、`<cwd>/chrome/portable/`、`<cwd>/node_modules/w-html2png/chrome/portable/`.
 - 移除環境變數 `W_HTML2PNG_CHROME_DIR`(改用 `W_BIN_CACHE`)與 `W_HTML2PNG_SKIP_DOWNLOAD`(安裝時已不下載,無需略過).

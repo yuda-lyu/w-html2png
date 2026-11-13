@@ -16,6 +16,7 @@ import WHtml2png from '../src/WHtml2png.mjs'
 let fdTest = path.resolve('./test/_tmp/dist')
 let fdRepo = path.resolve('.')
 let fpChild = fileURLToPath(new URL('./tools/childDraw.mjs', import.meta.url))
+let fpRecord = fileURLToPath(new URL('./tools/recordLaunch.mjs', import.meta.url))
 
 
 let prep = (name, mutate = null) => {
@@ -104,7 +105,8 @@ describe('unit-dist', function() {
         if (process.platform !== 'win32') {
             this.skip()
         }
-        //小型假組(同形; chrome.exe非瀏覽器, 啟動必失敗, 錯誤訊息含實際啟動之路徑), 以本地鏡像離線供檔: 驗dist之ensureBins(含以tar解出成員)、快取位置與啟動路徑
+        //小型假組(同形; chrome.exe非瀏覽器), 以本地鏡像離線供檔: 驗dist之ensureBins(含以tar解出成員)、快取位置與啟動路徑;
+        //啟動經w-playwright(dist外部化之w-playwright, 以預載之setBrowserTypeForTest記錄所啟動之執行檔與參數, 不實際啟動; w-playwright之啟動錯誤為固定詞彙不含路徑, 故不以錯誤訊息判斷路徑)
         let fb = makeFakeBundle(path.join(fdTest, 'cons'))
         let fdPkg = path.join(fdTest, 'cons', 'proj', 'node_modules', 'w-html2png')
         let fdSub = path.join(fdTest, 'cons', 'proj', 'sub')
@@ -116,12 +118,19 @@ describe('unit-dist', function() {
         fs.copyFileSync(path.join(fdOk, 'dist', 'w-html2png.umd.js'), path.join(fdPkg, 'dist', 'w-html2png.umd.js'))
         fs.writeFileSync(path.join(fdPkg, 'bin', 'manifest.json'), JSON.stringify(fb.manifest))
         putMirrorParts(fdMirror, fb.parts)
-        let cfg = { mod: path.join(fdPkg, 'dist', 'w-html2png.umd.js'), cjs: true, opt: { retry: 1 } }
-        let r = await runChild(fpChild, { cwd: fdSub, env: { CHILD_CFG: JSON.stringify(cfg), W_BIN_MIRROR: fdMirror, W_BIN_OFFLINE: '1', W_BIN_CACHE: '' } })
+        let fpDist = path.join(fdPkg, 'dist', 'w-html2png.umd.js')
+        let cfg = { mod: fpDist, cjs: true, opt: { retry: 1 } }
+        let r = await runChild(fpChild, { cwd: fdSub, preload: [fpRecord], env: { CHILD_CFG: JSON.stringify(cfg), RECORD_LAUNCH_FROM: fpDist, W_BIN_MIRROR: fdMirror, W_BIN_OFFLINE: '1', W_BIN_CACHE: '' } })
         assert.ok(r.result, r.out.slice(-500))
         assert.strict.equal(r.result.ok, false)
+        assert.strict.equal(r.result.err.includes('[E_LAUNCH] browser launch failed'), true, r.result.err.slice(0, 600)) //dist之啟動經w-playwright(錯誤碼保留於訊息, 規則R19)
+        let launched = r.out.split('\n').filter((l) => l.startsWith('LAUNCHED ')).map((l) => JSON.parse(l.slice('LAUNCHED '.length)))
         let fpExe = path.join(fdPkg, 'bin-cache', fb.bundleId, ...fb.relExe.split('/'))
-        assert.ok(r.result.err.includes(fpExe), r.result.err.slice(0, 600))
+        assert.strict.equal(launched.length, 1, r.out.slice(-800))
+        assert.strict.equal(launched[0].executablePath, fpExe)
+        let args = launched[0].args
+        assert.strict.equal(args.filter((a) => /^--?disable-features(=|$)/i.test(a)).length, 1, JSON.stringify(args)) //守門: 恰一串, 為最後一個參數
+        assert.strict.equal(/^--disable-features=(.+,)?AutofillAiWalletPrivatePasses(,|$)/.test(args[args.length - 1]), true, args[args.length - 1])
         for (let m of fb.members) {
             let fp = path.join(fdPkg, 'bin-cache', fb.bundleId, ...m.path.split('/'))
             assert.strict.equal(Buffer.compare(fs.readFileSync(fp), m.bytes), 0, m.path)

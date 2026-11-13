@@ -1,9 +1,10 @@
 import { EventEmitter } from 'events'
 import { spawn } from 'child_process'
-import { chromium } from 'playwright-core'
+import wpw from 'w-playwright'
 
 
-//測試用假playwright瀏覽器: 取代chromium.launch, 使「瀏覽器卡死」可由測試以閘門(gate)精確控制, 不暫停真chrome行程
+//測試用假playwright瀏覽器: 經w-playwright之測試接縫setBrowserTypeForTest取代其所呼叫之BrowserType(本套件之src與測試取同一個w-playwright, 同時生效), 使「瀏覽器卡死」可由測試以閘門(gate)精確控制, 不暫停真chrome行程
+//替身收到之選項為w-playwright合併後者(含守門之--disable-features), 不呼叫next(), 故不啟動任何真瀏覽器
 //主程序pid預設指向測試自行啟動之一個真實空轉行程(node), 使強制結束(樹狀結束pid)可被真實驗證: 行程是否結束以其exit事件為準
 //只實作WHtml2png.mjs用到之介面子集: launch -> browser(on/off/isConnected/close/newContext/newBrowserCDPSession) -> context(route/newPage/browser/close) -> page(on/setDefaultNavigationTimeout/setViewportSize/setContent/goto/waitForLoadState/evaluate/waitForFunction/screenshot/close)
 
@@ -31,28 +32,46 @@ function spawnIdle() {
 }
 
 
-//installFake, 安裝假chromium.launch, 回傳env; env.cfg為預設行為, 各瀏覽器建立時複製一份(browser.cfg), 可於執行中改動
-//cfg.launch:'ok'|'hang'(hang時launch卡住直到env.launchGate.resolve())
+//installFake, 以setBrowserTypeForTest安裝假BrowserType之launch, 回傳env(env.restore還原); env.cfg為預設行為, 各瀏覽器建立時複製一份(browser.cfg), 可於執行中改動
+//cfg.launch:'ok'|'hang'(hang時launch卡住直到env.launchGate.resolve())|'throw'(launch以錯誤結束, w-playwright依真啟動之規則轉為E_LAUNCH)
 //cfg.cdp:'ok'|'hang'; cfg.pid:'child'(預設, 真實空轉行程)|數字|null(CDP不回browser行程)
 //cfg.close:'ok'|'hang'; cfg.newPage:'ok'|'hang'; cfg.pageClose:'ok'|'hang'; cfg.pageWait:'ok'|'hang'(hang時頁內等待卡住, 頁面關閉即以錯誤結束)
 //cfg.nav:'ok'|'gate'(setContent/goto待page.gateNav放行才返回, 代表networkidle尚未到達)
 //cfg.load:'ok'(立即發出load)|'silent'(回報已load但不發出事件, 事件由測試於載入期間自行發出)|'gate'(待page.gateLoad放行才發出load)|'reject'(限時內未load)|'gate-reject'(待page.gateLoad放行後才以錯誤結束); 頁面關閉時等待中者以錯誤結束
 //cfg.settle(頁內計時器, 即page.evaluate):'ok'(立即返回)|'gate'(每次待page.gateEval放行, 放行後換新閘門)|'hang'(不返回, 頁面關閉時以錯誤結束)|'reject'(每次以錯誤結束)|'reject1'(第一次以錯誤結束, 代表導覽使執行環境銷毀)
 function installFake(cfg = {}) {
-    let own = Object.prototype.hasOwnProperty.call(chromium, 'launch')
-    let bak = chromium.launch
+    let restoreSeam = null
+    let launchWaiters = []
     let env = {
         cfg: { launch: 'ok', cdp: 'ok', pid: 'child', close: 'ok', newPage: 'ok', pageClose: 'ok', pageWait: 'ok', load: 'ok', settle: 'ok', ...cfg },
         launches: [],
+        launchOpts: [], //替身收到之(合併後)選項, 含launch:'throw'而未建立瀏覽器者
         children: [],
         launchGate: makeGate(),
         restore: () => {
-            if (own) {
-                chromium.launch = bak
+            restoreSeam()
+        },
+        //waitLaunch, 等到第n個假瀏覽器已建立(替身之launch已被呼叫)才解決: w-playwright於呼叫替身前另有非同步之前置(環境與版本檢查、登入守門開啟時讀錯誤次數), 替身不再於WHtml2png發起啟動之同一tick被呼叫, 依賴「啟動已發起」之時點者以此事件同步(不以延時偵測)
+        //pm(選用)為該次出圖之Promise: 其先於替身被呼叫而結束時(如登入守門拒絕), 以含其結果之錯誤reject, 不懸置至測試逾時
+        waitLaunch: (n, pm = null) => {
+            let pmLaunch = null
+            if (env.launches.length >= n) {
+                pmLaunch = Promise.resolve(env.launches[n - 1])
             }
             else {
-                delete chromium.launch
+                pmLaunch = new Promise((resolve) => {
+                    launchWaiters.push({ n, resolve })
+                })
             }
+            if (pm === null) {
+                return pmLaunch
+            }
+            let pmEnd = Promise.resolve(pm).then((r) => {
+                throw new Error(`the call settled before launch ${n}: ${JSON.stringify(r)}`)
+            }, (err) => {
+                throw new Error(`the call failed before launch ${n}: ${String(err)}`)
+            })
+            return Promise.race([pmLaunch, pmEnd])
         },
         //releaseAll, 放行所有卡住者並結束殘留之空轉行程(測試收尾用)
         releaseAll: async () => {
@@ -69,14 +88,27 @@ function installFake(cfg = {}) {
         },
     }
 
-    chromium.launch = function(opt) {
-        let browser = new FakeBrowser(env, { ...env.cfg }, opt)
-        env.launches.push(browser)
-        if (browser.cfg.launch === 'hang') {
-            return env.launchGate.pm.then(() => browser)
-        }
-        return Promise.resolve(browser)
-    }
+    restoreSeam = wpw.setBrowserTypeForTest({
+        launch: (opt) => {
+            env.launchOpts.push(opt)
+            if (env.cfg.launch === 'throw') {
+                return Promise.reject(new Error('fake launch failure'))
+            }
+            let browser = new FakeBrowser(env, { ...env.cfg }, opt)
+            env.launches.push(browser)
+            launchWaiters = launchWaiters.filter((w) => {
+                if (env.launches.length >= w.n) {
+                    w.resolve(env.launches[w.n - 1])
+                    return false
+                }
+                return true
+            })
+            if (browser.cfg.launch === 'hang') {
+                return env.launchGate.pm.then(() => browser)
+            }
+            return Promise.resolve(browser)
+        },
+    })
 
     return env
 }

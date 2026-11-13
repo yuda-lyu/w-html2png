@@ -115,3 +115,18 @@
 ### 工具
 - ESLint 8 以非 ASCII 絕對路徑為參數時回「No files matching」;以 `quiet-run --cwd <repo> -- npx eslint --ext .mjs src test` 之相對路徑執行。
 - 1.0.53 以前之 `downloadFiles` 自 `github.com/yuda-lyu/w-html2png/raw/refs/heads/master/chrome/` 下載;1.0.54 起釘 `5ebfb11f…`。查舊版下載來源用 `git grep -n "github" <提交>^ -- src`。
+
+## 2026-11-13 pm-h2p(改經 w-playwright 啟動,規則 R19)
+
+### 帳號鎖定之安全紀律下如何試跑
+- 自帶 Chrome 138 早於 153(上游:152 不觸發、153 起觸發),但仍先做**一次受控啟動**(經 w-playwright、`W_PLAYWRIGHT_LOGON_GUARD=1`)並以 `cscript //nologo <badpw 讀取腳本> <帳號>` 前後讀錯誤次數(0 → 0),才跑會大量啟動之全套;全套以 `mocha --parallel --jobs 4` 限並行數——登入守門只在行程內依序,跨行程同時讀到 0 會同時啟動,限 jobs 即限「守門擋下前可能之最大增量」。
+- **修前對照不得以 playwright 直接啟動真瀏覽器**:新接線測試之 `executablePath` 取「存在之非執行檔」(測試檔自身),未經替身之啟動於 `CreateProcess` 即失敗(`spawn EFTYPE`),不起任何程式,修前之紅與變異之紅皆可安全取得;修前副本以 `git archive HEAD src toolg package.json` 解到 `./tmp/`,其 `node_modules` 由上層 repo 解析,不必建 junction。
+
+### 測試之改寫
+- **w-playwright 呼叫替身之前有非同步前置**(環境、版本、登入守門開啟時以 cscript 讀錯誤次數,約 0.1～1 秒):修前 `chromium.launch` 於 `getGen`／`acquire` 當下同步被呼叫,假時鐘之測試在 `step: strategy.acquire` 後即 `tick` 而預設「啟動已發起」;遷移後 13 案失敗(`env.launches[0]` 為 undefined、逾時落在錯的步驟)。修法為事件同步 `env.waitLaunch(n)`(假 BrowserType 之 launch 被呼叫才解決),不改斷言、不加延時;未開登入守門時前置只有 microtask,故此類失敗只在守門開啟之環境現形。
+- 替身之拋錯由 w-playwright 轉為 `E_LAUNCH`(固定詞彙),原錯誤不入訊息;`unit-dist` 原以「錯誤訊息含執行檔路徑」斷言所啟動者,改以預載(`test/tools/recordLaunch.mjs`)於子行程內 `createRequire(<dist 檔>)('w-playwright').setBrowserTypeForTest(...)` 記錄——須自 dist 檔之位置解析,才與 dist 之 `require('w-playwright')` 共用同一模組實例。
+- 登入守門之拒絕路徑以子行程設 `W_PLAYWRIGHT_LOGON_GUARD=1`、`USERDOMAIN` ≠ `COMPUTERNAME`(w-playwright README:非本機帳號即讀不到而拒絕)取得,不需讀內部模組,且只會更嚴、不放寬父行程之守門。
+- `unit-timeoutFake` 之「同一世代同時兩個瀏覽器層逾時」案有除錯用之真實計時器(`realSetTimeout` 8 秒印 `DBG`),其 `clearTimeout` 於假時鐘下清不掉,整檔跑超過 8 秒即於輸出末尾印一行 `DBG`(既有,非失敗)。
+
+### 驗證
+- 基準圖之精確比對:以 `tmp/` 探測腳本自 `test/unit-WHtml2png.test.mjs` 抽出 testa、testb 之 html 重出,與 `test/test-scla.b64`、`test-sclb.b64` 比對 base64 逐字相同(差異像素 0)——同 Playwright 1.64.1、同參數只多守門之 `--disable-features`,Chrome 138 輸出不變。

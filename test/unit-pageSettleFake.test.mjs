@@ -10,7 +10,7 @@ import { installFake, makeTracer } from './tools/fakeChromium.mjs'
 //規則R18: 載入返回(networkidle)不代表頁面完成; 檢查頁面錯誤與截圖前須等到load與靜止窗
 //以假playwright瀏覽器精確控制事件順序(networkidle先於load、窗內才出現之請求等), 窗與上限以假時鐘(node:test mock.timers, 含Date)驗證, 其餘以onTrace與頁面操作事件同步, 不以延時偵測
 let fdTest = path.resolve('./test/_tmp/pageSettleFake')
-let exe = process.execPath //executablePath只需為存在之檔案(chromium.launch已被取代, 不會執行)
+let exe = process.execPath //executablePath只需為存在之檔案(w-playwright所呼叫之BrowserType已以setBrowserTypeForTest取代, 不會執行)
 let call = (opt) => WHtml2png(100, 50, 1, '<div>x</div>', { executablePath: exe, retry: 1, fdHtml: fdTest, fdErr: fdTest, ...opt })
 let settle = (pm) => pm.then((v) => ({ ok: true, v }), (e) => ({ ok: false, e: String(e) }))
 let flush = async () => { //讓所有microtask與已排入之I/O回呼跑完(setImmediate不被假時鐘取代, 多輪使其不受單輪事件迴圈順序影響)
@@ -456,9 +456,14 @@ describe('unit-pageSettleFake', function() {
             it(`onTrace為${name}: 順序保證不變(load前不截圖)`, async function() {
                 env = installFake({ pid: null, load: 'gate' })
                 let pm = settle(call({ mode: 'alive', rejectOnPageError: true, onTrace }))
-                while (!env.launches[0] || !env.launches[0].pages[0]) {
+                let st = { ended: null }
+                pm.then((v) => {
+                    st.ended = v
+                })
+                while (st.ended === null && (!env.launches[0] || !env.launches[0].pages[0])) {
                     await flush()
                 }
+                assert.strict.equal(st.ended, null, `the call settled before the page opened: ${JSON.stringify(st.ended)}`) //如啟動前置被拒(登入守門), 不空轉至逾時
                 let page = env.launches[0].pages[0]
                 await page.waitOrder('setContent')
                 await flush()

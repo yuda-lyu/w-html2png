@@ -5,7 +5,7 @@ let fdSrc = './src'
 let fdTar = './dist'
 
 
-//globals, 外部模組: Node內建模組與playwright-core(本套件為Node專用, runin為nodejs); child_process為wsemi之fsEnsureBins解壓所用
+//globals, 外部模組: Node內建模組與w-playwright(本套件為Node專用, runin為nodejs; 瀏覽器一律經w-playwright啟動, 不打包進dist); child_process為wsemi之fsEnsureBins解壓所用
 let globals = {
     'fs': 'fs',
     'path': 'path',
@@ -17,7 +17,7 @@ let globals = {
     'stream/promises': 'stream/promises',
     'child_process': 'child_process',
     'events': 'events',
-    'playwright-core': 'playwright-core',
+    'w-playwright': 'w-playwright',
 }
 
 
