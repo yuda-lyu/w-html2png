@@ -152,7 +152,7 @@ let b64 = await WHtml2png(620, 235, 3, html, { mode: 'alive', retry: 3, timeout:
 - 環境變數:
   - `W_BIN_CACHE=<資料夾>`:快取改放 `<資料夾>/w-html2png/<組識別>/`(套件所在之 `node_modules` 唯讀時使用,多套件可共用同一資料夾).
   - `W_BIN_MIRROR=<資料夾或 http(s) 網址>`:內網鏡像,先找鏡像再連 GitHub;可放整組 `<鏡像>/w-html2png/<組識別>/<組內路徑>`(以 `W_BIN_CACHE` 製成者即是),或各分割 `<鏡像>/w-html2png/<sha256>/portable.zip.00N`.鏡像之檔同樣以清單校驗,不符即不用.
-  - `W_BIN_OFFLINE=1`:不連網,只用快取與鏡像;缺檔時錯誤(`E_OFFLINE_MISSING`)會列出全組各檔(路徑、sha256、大小)、組資料夾應放之完整路徑與各分割可放之鏡像路徑.
+  - `W_BIN_OFFLINE=1`:不連網,只用快取與鏡像;缺檔時錯誤(`E_OFFLINE_MISSING`)之訊息只列缺哪個組(`chrome`)與準備方法(不含路徑與 sha256);全組各檔(路徑、sha256、大小)、組資料夾應放之完整路徑與各分割可放之鏡像路徑見該錯誤之 `err.missing[]`.
 - 離線部署:
   1. 在可連網之電腦設 `W_BIN_CACHE=<空資料夾>`,呼叫 `WHtml2png.ensureBins()` 一次(或出圖一次).
   2. 把該資料夾整個帶到內網電腦,設 `W_BIN_MIRROR=<該資料夾>`(全離線時另設 `W_BIN_OFFLINE=1`).
@@ -165,7 +165,24 @@ let bins = await WHtml2png.ensureBins() // { chrome: '<組資料夾之絕對路�
 let fpExe = bins.bundles.chrome.files['portable/App/Chrome-bin/138.0.7204.97/chrome.exe'] // 組內各檔之絕對路徑
 ```
 
-- 同一函數亦可深層匯入 `w-html2png/src/ensureBins.mjs`.取不到時 `ensureBins` reject 帶 `code` 之 Error(`E_OFFLINE_MISSING`、`E_HASH_MISMATCH`、`E_SIZE_MISMATCH`、`E_HTTP`、`E_NETWORK`、`E_TIMEOUT`、`E_EXTRACT`、`E_MANIFEST` 等,由 wsemi 之 `fsEnsureBins` 統一);`WHtml2png` 維持 reject 字串,內容為 `[錯誤碼] 說明`.
+- 同一函數亦可深層匯入 `w-html2png/src/ensureBins.mjs`.取不到時 `ensureBins` reject 帶 `code` 之 Error(`E_OFFLINE_MISSING`、`E_HASH_MISMATCH`、`E_SIZE_MISMATCH`、`E_HTTP`、`E_NETWORK`、`E_TIMEOUT`、`E_EXTRACT`、`E_MANIFEST` 等,由 wsemi 之 `fsEnsureBins` 統一);`WHtml2png` 維持 reject 字串,內容為 `[錯誤碼] 說明`;離線缺檔之字串只含組名與固定說明,**不含路徑與 sha256**(字串無結構欄位).
+- 離線缺檔時之放置位置:`ensureBins()` 之 Error 其 `code` 為 `E_OFFLINE_MISSING` 時,`err.missing[]` 載明 `name`(`chrome`)、`cachePath`(組資料夾應放入快取之完整路徑)、`mirrorPath`(有設鏡像時應放入鏡像之組資料夾完整路徑,否則為 `null`),及 `bundle.files[]` 逐檔之 `path`、`sha256`、`size`、`missing`、`cachePath`、`mirrorPath`(整組須備妥)與 `bundle.archives[].parts[]` 各分割之 `name`、`sha256`、`size`、`mirrorPath`;**請自 `cachePath`／`mirrorPath` 讀取**.`WHtml2png()` 收到 `[E_OFFLINE_MISSING]` 字串時,於同環境呼叫 `WHtml2png.ensureBins()` 即得.
+
+```js
+import WHtml2png from 'w-html2png'
+
+//W_BIN_OFFLINE=1 且快取與鏡像皆無 chrome 組時
+try {
+    await WHtml2png.ensureBins()
+}
+catch (err) {
+    if (err.code === 'E_OFFLINE_MISSING') {
+        console.log(err.missing)
+        // => [ { name: 'chrome', cachePath: 'D:\\xxx\\…\\<組識別>', mirrorPath: null, bundle: { id: '<組識別>', files: [ { path: 'portable/App/Chrome-bin/…', sha256: '…', size: …, missing: true, cachePath: '…', mirrorPath: null }, … ], archives: [ … ] }, … } ]
+    }
+}
+```
+
 - 解壓使用 Windows 內建之 `tar.exe`(`%SystemRoot%\System32\tar.exe`).
 
 ## Breaking changes

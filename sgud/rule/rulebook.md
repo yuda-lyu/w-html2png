@@ -14,7 +14,7 @@
 - 測試:`test/unit-buildHtml.test.mjs`(5 位置 × 12 字樣 = 60 格逐字)、`test/unit-render.test.mjs`(真 Chrome 頁內自檢)。
 
 ### R2 Chrome 取得:`opt.executablePath` 優先,否則經 `ensureBins` 取檔案組 chrome(R16);與 cwd 無關、永不寫入 cwd
-- 順序:`opt.executablePath`(給了即不取組)> `src/WHtml2png.mjs` 之 `getBundledChrome` → `ensureBins()` → `r.bundles.chrome.files` 中唯一符合 `portable/App/Chrome-bin/<版本>/chrome.exe` 者(版本由清單決定,不寫死;非恰一個 → `E_MANIFEST`)。取不到時 reject 字串 `[錯誤碼] 說明`。
+- 順序:`opt.executablePath`(給了即不取組)> `src/WHtml2png.mjs` 之 `getBundledChrome` → `ensureBins()` → `r.bundles.chrome.files` 中唯一符合 `portable/App/Chrome-bin/<版本>/chrome.exe` 者(版本由清單決定,不寫死;非恰一個 → `E_MANIFEST`)。取不到時 reject 字串 `[錯誤碼] 說明`。**離線缺檔(`E_OFFLINE_MISSING`)之訊息不帶路徑與 sha256**(規格 O3、T6、輸入參數檢測 V20,2026-11-18):`ensureBins()` 之 Error 訊息只含組名與準備方法,組資料夾、逐成員(`bundle.files[]`:`path`、`sha256`、`size`、`missing`、`cachePath`、`mirrorPath`)與各分割(`bundle.archives[].parts[]`)見 `err.missing[]`;`WHtml2png()` 之字串(無結構欄位)由 `getBundledChrome` 之接收處改為 `[E_OFFLINE_MISSING] offline: chrome is not in the cache or the mirror; …call ensureBins() … read the err.missing[]…` 之固定說明(`src/WHtml2png.mjs`),其他錯誤碼沿用 wsemi 之訊息。對應測試:`test/api-ensureBins.test.mjs` T6 兩案(斷言 `err.missing[]` 逐成員、分割與鏡像欄位,且訊息不含組資料夾、成員路徑、sha256)與〈rejects with the string "[code] message"〉(字串不含路徑與 sha256,並以 `WHtml2png.ensureBins()` 之 `err.missing[]` 驗放置位置)。
 - 無舊位置查找、無套件專屬環境變數(原則 14,2026-10-29 移除 `W_HTML2PNG_CHROME_DIR`、`W_HTML2PNG_SKIP_DOWNLOAD` 與 `chrome/portable` 三處舊位置)。
 - 套件根之推導只在 `src/pkgRoot.mjs`(單一擁有者),`ensureBins.mjs`(清單與預設快取之基準)與函式庫供應(`libRoutes.mjs`)共用。
 - 頂層不得宣告 `__filename`/`__dirname`(R4)。

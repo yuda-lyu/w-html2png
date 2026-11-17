@@ -130,3 +130,4 @@
 
 ### 驗證
 - 基準圖之精確比對:以 `tmp/` 探測腳本自 `test/unit-WHtml2png.test.mjs` 抽出 testa、testb 之 html 重出,與 `test/test-scla.b64`、`test-sclb.b64` 比對 base64 逐字相同(差異像素 0)——同 Playwright 1.64.1、同參數只多守門之 `--disable-features`,Chrome 138 輸出不變。
+- wsemi 1.9.64 起 `E_OFFLINE_MISSING` 之訊息只列組名並指向「this error 之 `missing` 欄位」,但 `WHtml2png()` 以字串 reject、無此欄位,透傳會誤導,故該碼之字串由 `getBundledChrome` 之接收處自組(只含組名與「呼叫 `ensureBins()` 讀 `err.missing[]`」);檔案組之 `err.missing[0].bundle` 為 `{ id, files[], archives[] }`(`files[]` 逐成員 `path/sha256/size/missing/cachePath/mirrorPath`,`archives[].parts[]` 為各分割 `name/sha256/size/url/mirrorPath`,`archives[].archive` 於分割型為 null),假組(`fakeBundle`)測試以此驗逐成員與分割。

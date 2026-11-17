@@ -349,7 +349,7 @@ describe(`ensureBins: bundle logic with a small bundle of the same shape (T3~T7,
         assert.strict.equal(nNet, 0)
     })
 
-    it(`T6: W_BIN_OFFLINE=1 without cache or mirror is E_OFFLINE_MISSING listing every file of the bundle, the bundle folder to place and the parts (O3, D3, M6)`, async function() {
+    it(`T6: W_BIN_OFFLINE=1 without cache or mirror is E_OFFLINE_MISSING; err.missing[] lists every file of the bundle (bundle.files[]), the bundle folder to place and the parts, the message only names the bundle (O3, D3, M6, V20)`, async function() {
         let shared = newDir('shared')
         let err = await withEnv({ W_BIN_OFFLINE: '1', W_BIN_CACHE: shared, W_BIN_MIRROR: undefined }, () => catchErr(() => ensureFake({ fetch: noNet })))
         assert.strict.equal(err instanceof Error, true)
@@ -357,26 +357,63 @@ describe(`ensureBins: bundle logic with a small bundle of the same shape (T3~T7,
         assert.strict.equal(nNet, 0)
         assert.strict.equal(srv.urls.length, 0)
 
-        //D3: 共用快取之組資料夾為<W_BIN_CACHE>/<套件>/<組識別>
+        //D3: 共用快取之組資料夾為<W_BIN_CACHE>/<套件>/<組識別>; 缺哪些檔、應放何處改由結構欄位err.missing[]驗(規格O3、T6; 原案以訊息內含組資料夾、各成員路徑、分割名驗)
         let fdBundle = path.join(shared, 'w-html2png', fb.bundleId)
+        assert.strict.equal(Array.isArray(err.missing), true)
+        assert.strict.equal(err.missing.length, 1)
         let m = err.missing[0]
         assert.strict.equal(m.name, 'chrome')
         assert.strict.equal(m.cachePath, fdBundle)
-        assert.strict.deepStrictEqual(m.bundle.files.map((v) => v.path).sort(), fb.members.map((v) => v.path).sort())
-        assert.strict.equal(m.bundle.files.every((v) => v.missing === true), true)
-        for (let s of [fdBundle, ...fb.members.map((v) => v.path), ...fb.parts.map((v) => v.name)]) {
-            assert.strict.equal(err.message.includes(s), true, `message should include [${s}]`)
+        assert.strict.equal(m.mirrorPath, null) //無鏡像時為null
+        assert.strict.equal(m.sha256, null) //檔案組無單一sha256
+        assert.strict.equal(m.size, fb.members.reduce((t, v) => t + v.size, 0))
+        assert.strict.equal(m.bundle.id, fb.bundleId)
+
+        //檔案組逐成員(須整組備妥): 路徑、sha256、大小、應放之完整路徑; 皆缺
+        let byPath = (a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+        let wantFiles = [...fb.members].sort(byPath).map((v) => ({ path: v.path, sha256: v.sha256, size: v.size, missing: true, cachePath: path.join(fdBundle, ...v.path.split('/')), mirrorPath: null }))
+        let gotFiles = [...m.bundle.files].sort(byPath).map((v) => ({ path: v.path, sha256: v.sha256, size: v.size, missing: v.missing, cachePath: v.cachePath, mirrorPath: v.mirrorPath }))
+        assert.strict.deepStrictEqual(gotFiles, wantFiles)
+
+        //分割(可改放鏡像者): 名稱、sha256、大小
+        assert.strict.equal(m.bundle.archives.length, 1)
+        let a = m.bundle.archives[0]
+        assert.strict.equal(a.archive, null)
+        assert.strict.equal(a.members, fb.members.length)
+        assert.strict.deepStrictEqual(a.parts.map((v) => [v.name, v.sha256, v.size]), fb.parts.map((v) => [v.name, v.sha256, v.bytes.length]))
+
+        //V20: 訊息含組名, 不含組資料夾、快取根、各成員路徑、分割名、sha256與組識別
+        assert.strict.equal(err.message.includes('chrome'), true, err.message)
+        for (let s of [fdBundle, shared, fb.bundleId, ...fb.members.map((v) => v.path), ...fb.members.map((v) => v.sha256), ...fb.parts.map((v) => v.name), ...fb.parts.map((v) => v.sha256)]) {
+            assert.strict.equal(err.message.includes(s), false, `message should not include [${s}]: ${err.message}`)
         }
         assert.strict.deepStrictEqual(listFiles(shared), [])
     })
 
-    it(`T6: with an offline mirror configured, the error also names the bundle folder in the mirror (O3, O1)`, async function() {
+    it(`T6: with an offline mirror configured, err.missing[] names the bundle folder, each member and each part in the mirror, the message does not (O3, O1, V20)`, async function() {
         let fdMirror = newDir('mirror') //不存在之鏡像
         let err = await catchErr(() => ensureFake({ fetch: noNet, cacheDir, mirror: fdMirror, offline: true }))
         assert.strict.equal(err && err.code, 'E_OFFLINE_MISSING', err && err.message)
         let fdM = path.join(fdMirror, 'w-html2png', fb.bundleId)
-        assert.strict.equal(err.missing[0].mirrorPath, fdM)
-        assert.strict.equal(err.message.includes(fdM), true)
+        let m = err.missing[0]
+        assert.strict.equal(m.mirrorPath, fdM)
+        assert.strict.equal(m.cachePath, path.join(cacheDir, fb.bundleId))
+
+        //組內逐成員之鏡像位置(<鏡像>/<套件>/<組識別>/<path>)與分割之鏡像位置(<鏡像>/<套件>/<sha256>/<name>)
+        let mirrorOfFile = {}
+        for (let v of m.bundle.files) {
+            mirrorOfFile[v.path] = v.mirrorPath
+        }
+        for (let v of fb.members) {
+            assert.strict.equal(mirrorOfFile[v.path], path.join(fdM, ...v.path.split('/')), v.path)
+        }
+        assert.strict.deepStrictEqual(m.bundle.archives[0].parts.map((v) => v.mirrorPath), fb.parts.map((v) => path.join(fdMirror, 'w-html2png', v.sha256, v.name)))
+
+        //V20: 訊息不含鏡像路徑、鏡像夾、快取位置
+        assert.strict.equal(err.message.includes('chrome'), true, err.message)
+        for (let s of [fdM, fdMirror, m.cachePath, cacheDir, fb.bundleId]) {
+            assert.strict.equal(err.message.includes(s), false, `message should not include [${s}]: ${err.message}`)
+        }
     })
 
     it(`T7: one file of the cached bundle altered (same size) or removed makes the whole bundle fetched again (D4, M6)`, async function() {
@@ -554,7 +591,27 @@ describe(`WHtml2png gets chrome through ensureBins (E2, D1)`, function() {
         })
         assert.strict.equal(typeof err, 'string') //既有之reject型態為字串(規則R6)
         assert.strict.equal(err.startsWith('[E_OFFLINE_MISSING] '), true, err.slice(0, 300))
-        assert.strict.equal(err.includes(path.join(cacheEmpty, 'w-html2png', id)), true, err.slice(0, 600))
+
+        //規格V20: 字串含組名與固定說明(離線準備請呼叫ensureBins()並讀err.missing[]), 不含組資料夾、快取根、組識別與組內各檔之sha256(原案以字串內含組資料夾驗)
+        let manifestFiles = manifest.bundles[0].archives[0].extract.files
+        assert.strict.equal(err.includes('chrome'), true, err.slice(0, 600))
+        assert.strict.equal(err.includes('ensureBins()'), true, err.slice(0, 600))
+        assert.strict.equal(err.includes('err.missing[]'), true, err.slice(0, 600))
+        for (let s of [path.join(cacheEmpty, 'w-html2png', id), cacheEmpty, id, ...manifestFiles.map((f) => f.sha256), ...manifestFiles.map((f) => f.path)]) {
+            assert.strict.equal(err.includes(s), false, `message should not include [${s}]: ${err.slice(0, 600)}`)
+        }
+
+        //應放之位置改由說明所指之途徑取得: 同環境下WHtml2png.ensureBins()之err.missing[](規格O3、T6)
+        let errBins = await withEnv({ W_BIN_CACHE: cacheEmpty, W_BIN_MIRROR: undefined, W_BIN_OFFLINE: '1' }, () => {
+            return catchErr(() => WHtml2png.ensureBins())
+        })
+        assert.strict.equal(errBins instanceof Error, true)
+        assert.strict.equal(errBins.code, 'E_OFFLINE_MISSING', errBins.message)
+        assert.strict.equal(errBins.missing[0].name, 'chrome')
+        assert.strict.equal(errBins.missing[0].cachePath, path.join(cacheEmpty, 'w-html2png', id))
+        assert.strict.equal(errBins.missing[0].bundle.id, id)
+        assert.strict.deepStrictEqual(errBins.missing[0].bundle.files.map((v) => [v.path, v.sha256, v.size]).sort(), manifestFiles.map((f) => [f.path, f.sha256, f.size]).sort())
+
         assert.strict.deepStrictEqual(launched, [])
         assert.strict.deepStrictEqual(netCalls, [])
 

@@ -790,6 +790,16 @@ async function core(width, height, scale, html, opt, strategy) {
                 return { err }
             })
         if (r.err !== undefined) {
+
+            //訊息不帶路徑與sha256(規格V20): E_OFFLINE_MISSING時wsemi之訊息指向錯誤物件之missing欄位, 但字串無此欄位, 故改為只含檔名(組名)與固定說明(放置位置請呼叫ensureBins()自其err.missing[]之cachePath、mirrorPath、bundle.files[]取得); 其他錯誤碼沿用wsemi之訊息(其已不帶值與路徑)
+            if (get(r.err, 'code') === 'E_OFFLINE_MISSING') {
+                let names = (Array.isArray(get(r.err, 'missing')) ? r.err.missing : []).map((v) => get(v, 'name')).filter((v) => isestr(v))
+                if (names.length === 0) {
+                    names = ['chrome']
+                }
+                return Promise.reject(`[E_OFFLINE_MISSING] offline: ${names.join(', ')} is not in the cache or the mirror; to get where to place it, call ensureBins() of this package and read the err.missing[] (cachePath, mirrorPath, bundle.files) of its E_OFFLINE_MISSING error`)
+            }
+
             return Promise.reject(`[${get(r.err, 'code', 'E_ENSURE_BINS')}] ${errToMsg(r.err)}`)
         }
         executablePath = r.fp
@@ -1500,7 +1510,7 @@ async function coreSingle(width, height, scale, html, opt = {}) {
  * @param {Boolean} [opt.writeError=false] 輸入是否輸出錯誤訊息至檔案布林值，預設false
  * @param {String} [opt.fdHtml='./_convertTemp'] 輸入臨時儲存繪圖用html檔之資料夾位置字串(相對於當前工作路徑)，僅設定opt.funGetUrl時會產生html暫存檔，預設'./_convertTemp'
  * @param {String} [opt.fdErr='./_convertTemp'] 輸入臨時儲存錯誤檔之資料夾位置字串(相對於當前工作路徑)，預設'./_convertTemp'
- * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串(取不到套件自帶之chrome時為'[錯誤碼] 說明'，錯誤碼如E_OFFLINE_MISSING、E_HASH_MISMATCH；啟動瀏覽器失敗時訊息含'[錯誤碼] 說明'，錯誤碼如E_LAUNCH、E_LAUNCH_TIMEOUT、E_LOGON_GUARD)
+ * @returns {Promise} 回傳Promise，resolve為回傳base64圖片，reject為錯誤訊息字串(取不到套件自帶之chrome時為'[錯誤碼] 說明'，錯誤碼如E_OFFLINE_MISSING、E_HASH_MISMATCH，離線缺檔為'[E_OFFLINE_MISSING] '加組名與固定說明，字串不帶路徑與sha256，放置位置請呼叫ensureBins()自其錯誤之err.missing[]取得；啟動瀏覽器失敗時訊息含'[錯誤碼] 說明'，錯誤碼如E_LAUNCH、E_LAUNCH_TIMEOUT、E_LOGON_GUARD)
  * @example
  *
  * async function testa() {
