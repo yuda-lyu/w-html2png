@@ -1,14 +1,14 @@
 {
   "name": "w-html2png",
-  "version": "1.0.87",
+  "version": "1.0.88",
   "main": "dist/w-html2png.umd.js",
   "dependencies": {
     "lodash": "^4.18.1",
-    "w-playwright": "^1.0.1",
-    "wsemi": "^1.9.70"
+    "w-playwright": "^1.0.2",
+    "wsemi": "^1.9.71"
   },
   "devDependencies": {
-    "w-package-tools": "^1.1.28"
+    "w-package-tools": "^1.1.29"
   },
   "scripts": {
     "test": "mocha --parallel \"test/*.test.mjs\" --timeout 180000",
