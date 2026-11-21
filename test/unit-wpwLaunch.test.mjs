@@ -145,8 +145,12 @@ describe('unit-wpwLaunch: dependencies and build go through w-playwright only (R
 
     let pkg = JSON.parse(fs.readFileSync(path.join(fdRepo, 'package.json'), 'utf8'))
 
-    it('package.json declares w-playwright ^1.0.1 and neither playwright nor playwright-core', function() {
-        assert.strict.equal(pkg.dependencies['w-playwright'], '^1.0.1')
+    it('package.json declares w-playwright ^1.0.1 or later and neither playwright nor playwright-core', function() {
+        //compare numerically, not literally: a literal '^1.0.1' broke when the cascade raised it to '^1.0.2' (2026-11-21)
+        let m = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(pkg.dependencies['w-playwright'] || '')
+        assert.ok(m, 'w-playwright range must be ^x.y.z: ' + pkg.dependencies['w-playwright'])
+        let v = m.slice(1).map(Number)
+        assert.ok(v[0] > 1 || (v[0] === 1 && (v[1] > 0 || v[2] >= 1)), 'w-playwright range must be >= ^1.0.1: ' + pkg.dependencies['w-playwright'])
         for (let k of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
             let o = pkg[k] || {}
             assert.strict.equal(Object.prototype.hasOwnProperty.call(o, 'playwright'), false, k)
