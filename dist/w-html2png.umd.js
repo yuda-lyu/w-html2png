@@ -1,5 +1,5 @@
 /*!
- * w-html2png v1.0.97
+ * w-html2png v1.0.98
  * (c) 2018-2021 yuda-lyu(semisphere)
  * Released under the MIT License.
  */
